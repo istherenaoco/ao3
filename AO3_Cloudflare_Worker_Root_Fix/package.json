@@ -1,0 +1,13 @@
+{
+  "name": "ao3-cloudflare-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "check": "node --check src/index.js && node --check src/shared.js && node --check public/assets/app.js && node --check public/assets/queue-widget-v44.js && node tests/test-title-render-v48.cjs && node tests/test-reader-font-weight-v50.cjs && node tests/test-provider-quota-v52.cjs && node tests/test-reader-spacing-v53.cjs && node tests/test-duplicate-paragraph-guard-v54.cjs && node tests/test-html-assets-v65.cjs && node tests/test-reader-retranslate-v66.cjs && node tests/test-settings-modal-structure-v67.cjs && node tests/test-header-controls-v68.cjs && node tests/test-bookmark-modal-title-v71.cjs && node tests/test-bookshelf-helper-copy-v72.cjs && node tests/test-green-app-theme-v73.cjs && node tests/test-additional-prompt-theme-v77.cjs && node tests/test-reader-original-dialogue-v79.cjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.45.0"
+  }
+}

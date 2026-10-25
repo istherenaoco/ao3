@@ -1,0 +1,12 @@
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(__dirname, '..');
+const js = fs.readFileSync(path.join(root, 'public/assets/app.js'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'public/assets/app.css'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+if (html.includes('readerRetranslateChapterBtn') || html.includes('AI 재번역')) throw new Error('Reader retranslation button still exists in HTML');
+if (js.includes("closest('#readerRetranslateChapterBtn')")) throw new Error('Reader retranslation click handler was not removed');
+if (css.includes('#readerRetranslateChapterBtn')) throw new Error('Reader retranslation button styles remain');
+if (!css.includes('body.reader-reading #readerNovelTitle > .reader-title-translated')) throw new Error('Compact reader title style missing');
+if (!html.includes('/assets/app.js?v=79.0') || !html.includes('/assets/app.css?v=78.0')) throw new Error('Asset cache version not updated');
+console.log('Reader retranslation removal regression checks passed.');
