@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <title>AO3 번역 서재로 이동 중…</title>
+</head>
+<body>
+  <p><a id="appLink" href="/">AO3 번역 서재 열기</a></p>
+  <script>
+    // Preserve query parameters and fragments for old bookmarks to /ao3.html.
+    var destination = '/' + window.location.search + window.location.hash;
+    window.location.replace(destination);
+  </script>
+</body>
+</html>
