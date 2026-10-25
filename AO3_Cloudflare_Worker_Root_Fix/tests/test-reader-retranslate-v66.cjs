@@ -1,0 +1,16 @@
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(__dirname, '..');
+const js = fs.readFileSync(path.join(root, 'public/assets/app.js'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'public/assets/app.css'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+if (!js.includes("closest('#readerRetranslateChapterBtn')")) throw new Error('Reader retranslate delegated click handler missing');
+const handlerAt = js.indexOf("closest('#readerRetranslateChapterBtn')");
+const bootAt = js.lastIndexOf('initEvents();');
+if (handlerAt < 0 || bootAt < handlerAt) throw new Error('Retranslate handler must be registered before app event initialization');
+if (!js.includes('await translateDraftChapter(ch, function(done, total)')) throw new Error('Reader retranslate does not invoke chapter translator');
+if (!js.includes("p.en || '').trim()")) throw new Error('Missing original-text guard');
+if (!js.includes("currentBtn.removeAttribute('aria-busy')")) throw new Error('Retranslate busy state is not reset');
+if (!css.includes('body.reader-reading #readerNovelTitle > .reader-title-translated')) throw new Error('Compact reader title style missing');
+if (!html.includes('/assets/app.js?v=73.0') || !html.includes('/assets/app.css?v=73.0')) throw new Error('Asset cache version not updated');
+console.log('Reader retranslation and compact title regression checks passed.');
