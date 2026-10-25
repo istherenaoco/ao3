@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#bcd6c1" id="ao3ThemeColorMeta" />
+  <script id="ao3AppThemeEarlyInit">
+    (function () {
+      var theme = 'dark';
+      try { var savedTheme = localStorage.getItem('ao3-app-theme'); theme = ['light', 'green'].includes(savedTheme) ? savedTheme : 'dark'; } catch (e) {}
+      document.documentElement.setAttribute('data-app-theme', theme);
+      document.documentElement.style.colorScheme = theme;
+      var themeMeta = document.getElementById('ao3ThemeColorMeta');
+      if (themeMeta) themeMeta.setAttribute('content', theme === 'green' ? '#bcd6c1' : (theme === 'light' ? '#f1f5f9' : '#0d1525'));
+    })();
+  </script>
+  <title>AO3 번역 스튜디오 & 나만의 웹 소설 책장</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=Gothic+A1:wght@300;400;500;600;700&family=Noto+Serif+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/app.css?v=78.0">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col selection:bg-rose-100 selection:text-rose-900">
+  <!-- AO3_BUILD=ao3-bookshelf-ui-v79.0 -->
+<!-- Top Navigation Header -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <button id="brandHomeBtn" type="button" class="flex items-center gap-2.5 text-left group focus:outline-none">
+          <div class="w-9 h-9 rounded-xl bg-rose-700 text-white flex items-center justify-center font-bold text-sm shadow-sm group-hover:bg-rose-800 transition">
+            AO3
+          </div>
+          <div class="truncate">
+            <h1 class="font-bold text-base sm:text-lg text-slate-900 leading-tight truncate">AO3 번역 서재</h1>
+          </div>
+        </button>
+      </div>
+
+      <!-- Main View Switcher Tabs -->
+      <nav class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl" aria-label="주요 메뉴">
+        <button id="navBookshelfBtn" type="button" data-view="bookshelf" aria-label="내 책장" title="내 책장" class="nav-tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 bg-white text-slate-900 shadow-sm">
+          <svg class="w-4 h-4 text-rose-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+          
+          <span id="navNovelCountBadge" class="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] bg-rose-50 text-rose-700 font-bold">0</span>
+        </button>
+        <button id="navCustomBookshelvesBtn" type="button" data-view="customBookshelves" aria-label="책장 관리" title="책장 관리" class="nav-tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900">
+          <svg class="w-4 h-4 text-rose-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5.5A2.5 2.5 0 016.5 3H20v18H6.5A2.5 2.5 0 014 18.5zM4 5.5v13M8 7h8M8 11h8"/></svg>
+          
+        </button>
+        <button id="navStudioBtn" type="button" data-view="studio" aria-label="번역 및 묶기 작업실" title="번역 및 묶기 작업실" class="nav-tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900">
+          <svg class="w-4 h-4 text-rose-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+          
+          <span id="navDraftCountBadge" class="hidden ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] bg-amber-100 text-amber-800 font-bold">0</span>
+        </button>
+        <button id="navBookmarksBtn" type="button" data-view="bookmarks" aria-label="북마크 및 태그" title="북마크 및 태그" class="nav-tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900">
+          <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/></svg>
+          
+          <span id="navBookmarkCountBadge" class="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] bg-amber-50 text-amber-700 font-bold">0</span>
+        </button>
+      </nav>
+
+      <!-- Utility Controls (Google Drive Sync, Settings & Backup) -->
+      <div class="flex items-center gap-1.5">
+        <button id="driveSyncBtn" type="button" aria-label="Google Drive 연결 및 동기화" title="Google Drive 연결 및 동기화" class="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1.5 text-xs font-semibold shadow-2xs">
+          <span id="driveSyncDot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+          <svg class="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>
+          <span id="driveSyncBtnText" class="header-icon-sr-only" aria-live="polite">Drive 연결</span>
+        </button>
+        <button id="openApiSettingsModalBtn" type="button" aria-label="API 설정 및 사용량" title="API 설정 및 사용량" class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition" style="display:flex;align-items:center;justify-content:center">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path stroke-linecap="round" stroke-linejoin="round" d="M10.8 12.2 20 3l1 1-2 2 2 2-3 3-2-2-2.2 2.2"/></svg>
+        </button>
+        <button id="openSettingsModalBtn" type="button" aria-label="번역 일반 설정" title="번역 일반 설정" class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition flex items-center gap-1 text-xs font-medium">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </button>
+        <button id="openBackupModalBtn" type="button" aria-label="서재 데이터 백업 및 복원" title="백업 및 복원" class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition flex items-center gap-1 text-xs font-medium">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- ==================== VIEW 1: BOOKSHELF (내 책장) ==================== -->
+    <section id="viewBookshelf" class="space-y-6">
+      <!-- Top Action & Filter Bar -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-5 shadow-sm space-y-4">
+        <div class="flex items-center gap-2">
+          <div class="min-w-0">
+            <h2 class="text-lg font-bold text-slate-900 flex flex-wrap items-center gap-1.5">
+              <span>나만의 번역 소설 책장</span>
+              <span id="shelfStorageBadge" title="IndexedDB에 자동 저장됩니다" class="text-xs font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">저장됨</span>
+              <span id="shelfDriveStatusBadge" title="Google Drive 상태" class="text-xs font-medium px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200">☁ 미연결</span>
+            </h2>
+          </div>
+        </div>
+
+        <!-- Search, Bookmark Filter, Sort Controls -->
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2 border-t border-slate-100">
+          <div class="sm:col-span-5 relative">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+            <input id="shelfSearchInput" type="text" placeholder="소설 제목, 작가, 본문 내용, 북마크 태그 검색..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600" />
+          </div>
+          <div class="sm:col-span-4 flex items-center gap-1.5">
+            <button id="filterAllNovelsBtn" type="button" class="flex-1 py-2 px-3 rounded-xl text-xs font-semibold border transition bg-slate-900 text-white border-slate-900">
+              전체 소설
+            </button>
+            <button id="filterBookmarkedNovelsBtn" type="button" class="flex-1 py-2 px-3 rounded-xl text-xs font-semibold border transition bg-white text-slate-700 border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1">
+              <svg class="w-3.5 h-3.5 text-amber-500 fill-amber-500" viewBox="0 0 24 24"><path d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/></svg>
+              <span>북마크한 소설만</span>
+            </button>
+          </div>
+          <div class="sm:col-span-3">
+            <select id="shelfSortSelect" aria-label="정렬 기준" class="w-full py-2 px-3 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-rose-600">
+              <option value="recentRead">최근 열람순</option>
+              <option value="createdDesc">최근 저장순</option>
+              <option value="titleAsc">제목 가나다순</option>
+              <option value="chaptersDesc">챕터 많은순</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Collapsible bookmark tag filters -->
+        <div class="pt-1 border-t border-slate-100">
+          <button id="shelfTagFilterToggleBtn" type="button" aria-expanded="true" aria-controls="shelfTagFilterContent" class="w-full flex items-center justify-between gap-2 py-1 text-left text-xs font-semibold text-slate-600 hover:text-slate-900">
+            <span class="flex items-center gap-1.5">
+              <span>북마크 태그</span>
+              <span id="shelfTagFilterTagCount" class="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">0</span>
+            </span>
+            <svg id="shelfTagFilterChevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div id="shelfTagFilterContent" class="pt-1">
+            <div id="shelfTagFilterBar" class="flex items-center gap-1.5 flex-wrap">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bookshelf Grid (Text-focused Cards without Cover Images) -->
+      <div id="bookshelfGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Populated dynamically -->
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: TRANSLATION & MERGE STUDIO (번역 · 묶기 작업실) ==================== -->
+    <section id="viewStudio" class="hidden space-y-5 max-w-3xl mx-auto">
+      <div class="space-y-5">
+
+        <!-- Primary One-Step Card: Fetch AO3 & Auto-Save -->
+        <div class="space-y-4">
+          <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center shrink-0" aria-hidden="true">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.72-1.71"/></svg>
+              </div>
+              <div class="min-w-0">
+                <h2 class="text-base sm:text-lg font-bold text-slate-900">AO3 챕터 추가</h2>
+                <p class="text-xs text-slate-500">링크 또는 본문을 넣고 번역하세요.</p>
+              </div>
+            </div>
+
+              <!-- Persistent queue: intentionally placed under the AO3 chapter-add header, in document flow. -->
+              <section id="ao3LinkQueueBox" class="mt-3 rounded-xl border border-sky-300 bg-sky-50/95 px-3 py-3 text-xs text-sky-950 shadow-sm" aria-live="polite" aria-label="AO3 링크 번역 대기열" style="position:relative;display:block;visibility:visible;opacity:1;width:100%;max-height:260px;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;padding:12px;border:1px solid #285a78;border-radius:14px;background:rgba(18,38,55,.98);color:#e0f2fe;box-shadow:0 2px 8px rgba(15,23,42,.08);font:12px/1.45 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+                <div class="flex items-center justify-between gap-2">
+                  <span id="ao3LinkQueueStatus" class="font-semibold">번역 대기열 · 0개 대기</span>
+                  <button id="clearAo3LinkQueueBtn" type="button" class="hidden text-sky-700 underline">대기열 비우기</button>
+                </div>
+                <div id="ao3LinkQueueActive" class="hidden mt-1 break-all text-sky-800"></div>
+                <ol id="ao3LinkQueueList" class="mt-1 space-y-1 break-all" style="max-height:120px;overflow-y:auto;"></ol>
+                <p id="ao3LinkQueueEmpty" class="mt-1 text-slate-500">대기 중인 링크가 없습니다. 번역 중 새 링크를 입력하면 이곳에 순서대로 쌓입니다.</p>
+              </section>
+
+            <!-- Hidden compatibility hooks used by existing studio handlers. -->
+            <div class="hidden" aria-hidden="true">
+              <button id="tabMethodUrlBtn" type="button"></button>
+              <button id="tabMethodPasteBtn" type="button"></button>
+              <button id="loadSampleAo3Btn" type="button"></button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2" role="group" aria-label="입력 방식">
+              <button id="studioUrlModeBtn" type="button" aria-pressed="true" class="studio-mode-button flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-semibold text-rose-800 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.72-1.71"/></svg>
+                <span>링크</span>
+              </button>
+              <button id="studioPasteModeBtn" type="button" aria-pressed="false" class="studio-mode-button flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-600 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 3h6v4H9zM8 12h8M8 16h6"/></svg>
+                <span>붙여넣기</span>
+              </button>
+            </div>
+
+            <!-- Single AO3 chapter URL only -->
+            <div id="methodUrlPanel" class="space-y-2">
+              <label for="ao3UrlInput" class="sr-only">AO3 챕터 링크</label>
+              <input id="ao3UrlInput" type="url" inputmode="url" autocomplete="url" placeholder="AO3 챕터 링크 붙여넣기" class="w-full px-3.5 py-3 rounded-xl border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600" />
+              <div class="flex items-center gap-2">
+                <button id="fetchAo3UrlBtn" type="button" class="flex-1 px-4 py-3 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-sm transition flex items-center justify-center gap-2 shadow-sm">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7l7 7-7 7"/></svg>
+                  <span>번역 / 대기열</span>
+                </button>
+              </div>
+              <!-- The queue panel lives outside the mode-specific input panels so it remains visible. -->
+
+
+              <!-- Live Extraction Status Log -->
+              <div id="ao3FetchLogBox" class="hidden rounded-xl bg-slate-900 text-slate-100 p-3.5 text-xs font-mono space-y-1 max-h-44 overflow-y-auto">
+                <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1 mb-1">
+                  <span>가져오기 상태</span>
+                  <button id="clearFetchLogBtn" type="button" class="text-slate-400 hover:text-white">닫기 ✕</button>
+                </div>
+                <div id="ao3FetchLogList" class="space-y-1 text-[11px] leading-relaxed"></div>
+              </div>
+
+              <!-- 1-Click AO3 Downloaded HTML/TXT File Import & Bookmarklet Helper -->
+              <div id="ao3FileDropZone" style="display:none!important" class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-rose-50/70 border border-dashed border-rose-300 text-xs transition">
+                <div class="space-y-0.5">
+                  <p class="font-bold text-rose-950">⚡ AO3 다운로드 HTML / TXT 파일 0.1초 즉시 추출</p>
+                  <p class="text-[11px] text-rose-800">AO3 작품 상단 <strong>[Download → HTML]</strong> 파일을 여기에 끌어다 놓거나 선택하면 네트워크 대기 없이 전 챕터를 즉시 추출합니다.</p>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <input id="ao3HtmlFileInput" type="file" accept=".html,.htm,.txt,.xhtml" multiple class="hidden" />
+                  <button id="ao3HtmlFileBtn" type="button" class="px-3 py-2 rounded-xl bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold text-xs shadow-2xs transition flex items-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <span>AO3 HTML/TXT 파일 불러오기</span>
+                  </button>
+                  <button id="copyAo3ExtractorScriptBtn" type="button" class="px-3 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs shadow-2xs transition">
+                    1클릭 추출기 복사
+                  </button>
+                </div>
+              </div>
+            </div>
+
+
+
+            <!-- Method B: Paste a login-gated chapter's body -->
+            <div id="methodPastePanel" class="hidden space-y-3">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label for="pasteNovelTitleInput" class="block text-xs font-semibold text-slate-700 mb-1">제목</label>
+                  <input id="pasteNovelTitleInput" type="text" placeholder="작품 제목" class="w-full min-w-0 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-rose-600" />
+                </div>
+                <div>
+                  <label for="pasteNovelAuthorInput" class="block text-xs font-semibold text-slate-700 mb-1">작가</label>
+                  <input id="pasteNovelAuthorInput" type="text" placeholder="작가명" class="w-full min-w-0 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-rose-600" />
+                </div>
+                <div>
+                  <label for="pasteChapterTitleInput" class="block text-xs font-semibold text-slate-700 mb-1">챕터</label>
+                  <input id="pasteChapterTitleInput" type="text" placeholder="Chapter 1" class="w-full min-w-0 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-rose-600" />
+                </div>
+                <div>
+                  <label for="pasteSourceUrlInput" class="block text-xs font-semibold text-slate-700 mb-1">원문 URL</label>
+                  <input id="pasteSourceUrlInput" type="url" placeholder="선택 사항" class="w-full min-w-0 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-rose-600" />
+                </div>
+              </div>
+              <div>
+                <label for="pasteEnglishTextarea" class="block text-xs font-semibold text-slate-700 mb-1">본문</label>
+                <textarea id="pasteEnglishTextarea" rows="8" placeholder="로그인한 AO3 페이지에서 복사한 영문 본문을 여기에 붙여넣으세요." class="w-full px-3.5 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600"></textarea>
+              </div>
+              <div class="flex justify-end gap-2">
+                <button id="addPastedChapterBtn" type="button" title="본문 번역" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm transition inline-flex items-center justify-center gap-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7l7 7-7 7"/></svg>
+                  <span>번역</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Translation Progress Banner -->
+            <div id="translationProgressBox" class="hidden rounded-xl bg-rose-50 border border-rose-200 p-3.5 space-y-2" aria-live="polite">
+              <div class="flex items-center justify-between gap-2 text-xs font-semibold text-rose-900">
+                <span id="translationStatusText" class="animate-pulse-subtle min-w-0">한국어 번역 진행 중...</span>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span id="translationProviderStatus" class="inline-flex items-center gap-1 rounded-full bg-white border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-700" data-provider="unknown">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-400"></span><span id="translationProviderStatusText">API 대기</span>
+                  </span>
+                  <span id="translationPercentText">0%</span>
+                </div>
+              </div>
+              <div class="w-full h-2 bg-rose-200/70 rounded-full overflow-hidden">
+                <div id="translationProgressBar" class="h-full bg-rose-700 transition-all duration-300" style="width: 0%"></div>
+              </div>
+              <div id="translationProviderErrors" class="hidden rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-950 whitespace-pre-wrap break-words" role="status" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <!-- Collapsible Advanced Manual Queue & Metadata Controls -->
+          <details id="studioAdvancedDetails" class="hidden bg-white rounded-2xl border border-slate-200 shadow-xs group">
+            <summary class="cursor-pointer select-none px-5 py-3.5 text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-900 flex items-center justify-between">
+              <span>⚙️ 고급 수동 편집 열기 (기존 소설에 이어붙이기 · 기본 북마크 태그 지정 · 챕터 대기열 수동 편집)</span>
+              <span class="text-xs text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div class="p-5 pt-2 border-t border-slate-100 space-y-5">
+          <!-- Draft Chapters Queue List -->
+          <div class="bg-slate-50/60 rounded-2xl border border-slate-200 p-4 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span>수집된 챕터 목록 (병합 대기열)</span>
+                  <span id="studioChapterCountBadge" class="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-700 font-bold">0개 챕터</span>
+                </h3>
+                <p class="text-xs text-slate-500">개별 챕터 또는 전체 챕터를 한국어로 번역하고 순서를 조정한 뒤 우측에서 한 권의 소설로 묶으세요.</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="translateAllChaptersBtn" type="button" class="px-3.5 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs shadow-sm transition flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/></svg>
+                  <span>미번역 챕터 전체 한국어 번역</span>
+                </button>
+                <button id="clearDraftChaptersBtn" type="button" class="px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-700 hover:border-rose-200 text-xs font-semibold transition">
+                  비우기
+                </button>
+              </div>
+            </div>
+
+            <div id="draftChaptersContainer" class="space-y-3">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Manual Step 2 Options inside Collapsible Advanced Drawer -->
+        <div class="space-y-4">
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <div>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 uppercase tracking-wide">자동 할당 & 선택 설정</span>
+              <h2 class="text-base sm:text-lg font-bold text-slate-900 mt-0.5">제목·원작자 자동 할당 & 자동 저장 옵션</h2>
+              <p class="text-xs text-slate-500 mt-0.5">좌측에서 추출 시 이 단계를 거치지 않고 <strong>AO3 페이지의 제목·원작자를 자동 인식하여 책장에 즉시 저장</strong>합니다. (기존 소설에 이어붙이거나 기본 북마크 태그를 미리 지정할 때만 아래 옵션을 사용하세요.)</p>
+            </div>
+
+            <!-- Mode: New Novel vs Append to Existing Novel -->
+            <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl text-xs font-semibold">
+              <button id="bindModeNewBtn" type="button" class="py-2 px-3 rounded-lg bg-white text-slate-900 shadow-sm transition">
+                새 단행본 소설로 묶기
+              </button>
+              <button id="bindModeAppendBtn" type="button" class="py-2 px-3 rounded-lg text-slate-600 hover:text-slate-900 transition">
+                기존 책장 소설에 이어붙이기
+              </button>
+            </div>
+
+            <!-- Existing Novel Selector (shown only in append mode) -->
+            <div id="appendTargetNovelBox" class="hidden space-y-1.5">
+              <label for="appendTargetNovelSelect" class="block text-xs font-semibold text-slate-700">이어붙일 책장 속 소설 선택 <span class="text-rose-600">*</span></label>
+              <select id="appendTargetNovelSelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:border-rose-600">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+
+            <!-- Novel Metadata Fields (shown in new mode or editable) -->
+            <div id="newNovelMetaFields" class="space-y-3.5">
+              <div>
+                <label for="novelTitleInput" class="block text-xs font-semibold text-slate-700 mb-1">
+                  소설 제목 할당 <span class="text-rose-600">* (필수)</span>
+                </label>
+                <input id="novelTitleInput" type="text" placeholder="예: [해리포터] 겨울밤의 기록 (완역본)" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600" />
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label for="novelAuthorInput" class="block text-xs font-semibold text-slate-700 mb-1">원작자 / 번역 메모 (선택)</label>
+                  <input id="novelAuthorInput" type="text" placeholder="예: Anonymous" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-rose-600" />
+                </div>
+                <div>
+                  <label for="novelFandomInput" class="block text-xs font-semibold text-slate-700 mb-1">원작 / 장르 분류 (선택)</label>
+                  <input id="novelFandomInput" type="text" placeholder="예: 판타지 / 미스터리" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-rose-600" />
+                </div>
+              </div>
+
+              <div>
+                <label for="novelSummaryInput" class="block text-xs font-semibold text-slate-700 mb-1">소설 한줄 소개 / 메모 (선택)</label>
+                <textarea id="novelSummaryInput" rows="2" placeholder="책장 목록에서 바로 확인할 줄거리나 메모를 적어두세요." class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-none focus:border-rose-600"></textarea>
+              </div>
+            </div>
+
+            <!-- Initial Bookmark & Bookmark Tags Setup -->
+            <div class="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+              <label class="flex items-center justify-between cursor-pointer select-none">
+                <span class="flex items-center gap-2 text-xs sm:text-sm font-semibold text-amber-950">
+                  <svg class="w-4 h-4 text-amber-500 fill-amber-500" viewBox="0 0 24 24"><path d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/></svg>
+                  <span>저장 시 이 소설을 북마크로 등록</span>
+                </span>
+                <input id="studioBookmarkCheck" type="checkbox" class="w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500" />
+              </label>
+
+              <div>
+                <label for="studioBookmarkTagsInput" class="block text-xs font-semibold text-amber-900 mb-1">
+                  북마크 태그 할당 (쉼표 `,` 또는 Enter로 구분)
+                </label>
+                <input id="studioBookmarkTagsInput" type="text" placeholder="예: angst, BDSM" class="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white text-xs sm:text-sm focus:outline-none focus:border-amber-600" />
+                <div class="flex flex-wrap gap-1 mt-2" id="quickPresetTagsBox">
+                  <span class="text-[11px] text-amber-800 mr-1 self-center">빠른 태그 추가:</span>
+                  <button type="button" data-quick-tag="angst" class="quick-tag-btn text-[11px] px-2 py-0.5 rounded-md bg-white border border-amber-200 text-amber-900 hover:bg-amber-100">#angst</button>
+                  <button type="button" data-quick-tag="BDSM" class="quick-tag-btn text-[11px] px-2 py-0.5 rounded-md bg-white border border-amber-200 text-amber-900 hover:bg-amber-100">#BDSM</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Summary of Binding & Save Action -->
+            <div class="pt-2 border-t border-slate-100 flex flex-col gap-2">
+              <button id="saveBoundNovelBtn" type="button" class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm transition flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <span id="saveBoundNovelBtnText">챕터들을 한 권으로 묶어 책장에 저장하기</span>
+              </button>
+            </div>
+          </div>
+        </div>
+            </div>
+          </details>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== CUSTOM BOOKSHELVES ==================== -->
+    <section id="viewCustomBookshelves" class="hidden space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">내 책장</h2>
+          
+        </div>
+        <button id="customShelfCreateToggleBtn" type="button" class="px-3 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-sm font-semibold">+ 책장 만들기</button>
+      </div>
+      <div id="customShelfCreatePanel" class="hidden bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label class="text-xs font-semibold text-slate-700">책장 종류
+            <select id="customShelfTypeInput" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"><option value="author">작가별 책장</option><option value="topic">주제별 책장</option></select>
+          </label>
+          <label class="text-xs font-semibold text-slate-700 sm:col-span-2">책장 이름
+            <input id="customShelfNameInput" type="text" maxlength="80" placeholder="예: 좋아하는 작가 / 겨울 분위기" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 text-sm" />
+          </label>
+        </div>
+        <p class="text-xs text-slate-500">이름은 직접 지정하세요. 작품의 작가명이나 태그를 읽어 자동으로 분류하지 않습니다.</p>
+        <div class="flex gap-2 justify-end"><button id="customShelfCancelCreateBtn" type="button" class="px-3 py-2 rounded-lg border border-slate-200 text-sm">취소</button><button id="customShelfCreateBtn" type="button" class="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold">만들기</button></div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-4 items-start">
+        <aside class="bg-white border border-slate-200 rounded-2xl p-3 space-y-4">
+          <div>
+            <h3 class="text-xs uppercase tracking-wide font-bold text-slate-500 px-2 mb-2">기본 책장</h3>
+            <button type="button" data-custom-shelf="all" class="custom-shelf-select w-full text-left px-3 py-2.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-100"><span class="font-semibold text-sm">📚 모든 번역 작품</span><span id="customShelfAllCount" class="block text-xs opacity-75 mt-0.5">0권</span></button>
+          </div>
+          <div>
+            <h3 class="text-xs uppercase tracking-wide font-bold text-slate-500 px-2 mb-2">작가별 책장</h3>
+            <div id="customAuthorShelvesList" class="space-y-1"><p class="text-xs text-slate-400 px-2 py-1">직접 만든 책장이 여기에 표시됩니다.</p></div>
+          </div>
+          <div>
+            <h3 class="text-xs uppercase tracking-wide font-bold text-slate-500 px-2 mb-2">주제별 책장</h3>
+            <div id="customTopicShelvesList" class="space-y-1"><p class="text-xs text-slate-400 px-2 py-1">직접 만든 책장이 여기에 표시됩니다.</p></div>
+          </div>
+        </aside>
+        <div class="min-w-0 bg-white border border-slate-200 rounded-2xl p-4 sm:p-5">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+            <div><h3 id="customShelfCurrentTitle" class="text-lg font-bold text-slate-900">모든 번역 작품</h3><p id="customShelfCurrentDescription" class="hidden text-xs text-slate-500 mt-1"></p></div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="customShelfAddWorkBtn" type="button" class="hidden px-3 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-semibold">+ 작품 추가</button>
+              <div id="customShelfActions" class="hidden flex gap-2"><button id="customShelfRenameBtn" type="button" class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold">이름 변경</button><button id="customShelfDeleteBtn" type="button" class="px-3 py-1.5 rounded-lg border border-rose-200 text-rose-700 text-xs font-semibold">책장 삭제</button></div>
+            </div>
+          </div>
+          <div class="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <button id="customShelfTagFilterToggle" type="button" aria-expanded="true" aria-controls="customShelfTagFilterContent" class="w-full flex items-center justify-between gap-2 text-left">
+              <span class="flex items-center gap-2"><span class="text-xs font-bold text-slate-700">태그 필터</span><span id="customShelfSelectedTagLabel" class="text-xs text-rose-700 font-semibold">전체 태그 표시 중</span></span>
+              <svg id="customShelfTagFilterChevron" class="w-4 h-4 shrink-0 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="customShelfTagFilterContent" class="pt-2 space-y-2"><div id="customShelfTagCloud" class="flex flex-wrap gap-1.5"><button type="button" data-custom-shelf-tag="" class="custom-shelf-tag-btn px-3 py-1 rounded-full text-xs font-semibold border bg-slate-900 text-white border-slate-900">전체 보기</button></div></div>
+          </div>
+          <div id="customShelfSearchPanel" class="hidden mb-4 rounded-2xl border border-rose-200 bg-rose-50/50 p-4 space-y-3">
+            <div class="flex items-start justify-between gap-3"><div><h4 class="text-sm font-bold text-slate-900">책장에 작품 추가</h4><p class="text-xs text-slate-500 mt-1">제목이나 작가 이름으로 검색한 뒤, 원하는 작품만 추가하세요.</p></div><button id="customShelfCloseSearchBtn" type="button" class="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold">닫기</button></div>
+            <label class="relative block"><span class="sr-only">작품 검색</span><span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span><input id="customShelfSearchInput" type="search" autocomplete="off" placeholder="작품 제목 또는 작가 검색..." class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500" /></label>
+            <p id="customShelfSearchHint" class="text-xs text-slate-500">검색어를 입력하면 추가할 수 있는 작품이 표시됩니다.</p>
+            <div id="customShelfSearchResults" class="space-y-2"></div>
+          </div>
+          <div id="customShelfWorkList" class="space-y-2"><p class="text-sm text-slate-500">저장된 번역 작품이 여기에 표시됩니다.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 3: BOOKMARKS & TAGS MANAGER (북마크 · 태그 관리) ==================== -->
+    <section id="viewBookmarks" class="hidden space-y-6">
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">저장한 문장 모아보기</h2>
+            <p class="text-xs sm:text-sm text-slate-500">뷰어에서 저장한 문장만 모아보고 태그별로 찾아 다시 열람하세요. 소설 단위 북마크는 이 페이지에 표시하지 않습니다.</p>
+          </div>
+
+        </div>
+
+        <!-- Tag Directory & Filter -->
+        <div class="pt-3 border-t border-slate-100 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700">등록된 북마크 태그 필터</span>
+            <span id="bmSelectedTagLabel" class="text-xs text-rose-700 font-semibold">전체 태그 표시 중</span>
+          </div>
+          <div id="bookmarkManagerTagCloud" class="flex flex-wrap gap-1.5">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Bookmarked Novels & Passages Lists -->
+      <div id="bookmarkManagerContent" class="space-y-6">
+        <!-- Populated dynamically -->
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 4: IN-APP NOVEL READER (웹 앱 내 소설 뷰어) ==================== -->
+    <section id="viewReader" class="hidden space-y-4">
+      <!-- Sticky Reader Control Bar -->
+      <div id="readerControlsBar" class="sticky top-16 z-20 bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <button id="readerBackToShelfBtn" type="button" class="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700 flex items-center gap-1 transition shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
+            <span>책장으로</span>
+          </button>
+          <div class="min-w-0">
+            <h2 id="readerNovelTitle" class="min-w-0 text-sm sm:text-base font-bold text-slate-900 leading-snug"><span class="reader-title-translated block truncate">소설 제목</span></h2>
+            <p id="readerNovelSubtitle" class="text-xs text-slate-500 truncate">작가 · 챕터 정보</p>
+          </div>
+        </div>
+
+        <!-- Chapter Selector & Prev/Next -->
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button id="readerPrevChapterBtn" type="button" class="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition">
+            이전 화
+          </button>
+          <select id="readerChapterSelect" aria-label="챕터 선택" class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs sm:text-sm font-semibold text-slate-800 bg-white focus:outline-none focus:border-rose-600 max-w-[220px] sm:max-w-xs truncate">
+            <!-- Populated dynamically -->
+          </select>
+          <button id="readerDeleteChapterBtn" type="button" title="현재 챕터 삭제" aria-label="현재 챕터 삭제" class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6m4-6v6"/></svg>
+          </button>
+          <button id="readerNextChapterBtn" type="button" class="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition">
+            다음 화
+          </button>
+        </div>
+
+        <!-- Reader Actions: Bookmark & Tag Editor, Bilingual Toggle, Typography -->
+        <div class="flex items-center gap-1.5">
+          <button id="readerNovelBookmarkBtn" type="button" class="px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold flex items-center gap-1.5 transition">
+            <svg id="readerNovelBookmarkIcon" class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/></svg>
+            <span>북마크 · 태그</span>
+          </button>
+          <button id="readerToggleBilingualBtn" type="button" class="hidden" aria-hidden="true" tabindex="-1"></button>
+          <button id="readerToggleDisplayPanelBtn" type="button" class="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition" title="뷰어 글꼴/테마 설정">
+            가
+          </button>
+        </div>
+      </div>
+
+      <!-- Collapsible Reader Typography & Theme Drawer -->
+      <div id="readerDisplayDrawer" class="hidden bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-center text-xs">
+          <div>
+            <span class="font-semibold text-slate-600 block mb-1.5">글꼴</span>
+            <select id="readerFontFamilySelect" aria-label="본문 글꼴" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-800 text-sm">
+              <option value="noto">Noto Sans KR · 기본</option>
+              <option value="plex">IBM Plex Sans KR · 정갈한 고딕</option>
+              <option value="gothic">Gothic A1 · 가는 고딕</option>\n              <option value="pretendard">Pretendard · 프리텐다드</option>
+            </select>
+          </div>
+          <div>
+            <label for="readerFontWeightSelect" class="font-semibold text-slate-600 block mb-1.5">글자 굵기</label>
+            <select id="readerFontWeightSelect" aria-label="본문 글자 굵기" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-800 text-sm">
+              <option value="300">가늘게 · 300</option>
+              <option value="400">보통 · 400</option>
+              <option value="500">또렷하게 · 500</option>
+            </select>
+          </div>
+          <div>
+            <span class="font-semibold text-slate-600 block mb-1.5">글자 크기 (<span id="readerFontSizeLabel">14px</span>)</span>
+            <div class="flex items-center gap-2">
+              <button id="readerFontSmallerBtn" type="button" class="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 font-bold">A-</button>
+              <button id="readerFontLargerBtn" type="button" class="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 font-bold">A+</button>
+            </div>
+          </div>
+        </div>
+        <div class="reader-spacing-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-200/70">
+          <div class="reader-spacing-control">
+            <label class="font-semibold text-slate-600 block mb-1">본문 좌우 여백</label>
+            <div class="reader-spacing-stepper">
+              <button id="readerSpacingHorizontalPaddingMinus" type="button" aria-label="본문 좌우 여백 줄이기">−</button>
+              <span class="reader-spacing-value">25px</span>
+              <button id="readerSpacingHorizontalPaddingPlus" type="button" aria-label="본문 좌우 여백 늘리기">+</button>
+            </div>
+          </div>
+          <div class="reader-spacing-control">
+            <label class="font-semibold text-slate-600 block mb-1">줄간격</label>
+            <div class="reader-spacing-stepper">
+              <button id="readerSpacingLineHeightMinus" type="button" aria-label="줄간격 줄이기">−</button>
+              <span class="reader-spacing-value">20px</span>
+              <button id="readerSpacingLineHeightPlus" type="button" aria-label="줄간격 늘리기">+</button>
+            </div>
+          </div>
+          <div class="reader-spacing-control">
+            <label class="font-semibold text-slate-600 block mb-1">문단 간격</label>
+            <div class="reader-spacing-stepper">
+              <button id="readerSpacingParagraphSpacingMinus" type="button" aria-label="문단 간격 줄이기">−</button>
+              <span class="reader-spacing-value">5px</span>
+              <button id="readerSpacingParagraphSpacingPlus" type="button" aria-label="문단 간격 늘리기">+</button>
+            </div>
+          </div>
+          <div class="reader-spacing-control">
+            <label class="font-semibold text-slate-600 block mb-1">첫 줄 들여쓰기</label>
+            <div class="reader-spacing-stepper">
+              <button id="readerSpacingFirstLineIndentMinus" type="button" aria-label="첫 줄 들여쓰기 줄이기">−</button>
+              <span class="reader-spacing-value">0px</span>
+              <button id="readerSpacingFirstLineIndentPlus" type="button" aria-label="첫 줄 들여쓰기 늘리기">+</button>
+            </div>
+          </div>
+        </div>
+        <p id="readerSpacingHint" class="text-xs text-slate-500 mt-2">− / + 버튼으로 1px 단위 조절합니다. 설정은 자동 저장되고 Google Drive와 동기화됩니다.</p>
+      </div>
+
+      <!-- Main Reading Canvas -->
+      <article id="readerPaperContainer" class="rounded-2xl border border-slate-200 shadow-sm bg-[#fbf8f1] text-slate-900 transition-colors duration-200">
+        <div id="readerContentInner" class="reader-content-inner max-w-3xl mx-auto px-5 sm:px-10 py-8 sm:py-12 space-y-8">
+          <!-- Chapter Header -->
+          <header class="border-b border-black/10 pb-5 space-y-2">
+            <div class="flex items-center justify-between gap-2 text-xs opacity-70">
+              <span id="readerChapterIndexLabel">Chapter 1</span>
+              <span id="readerChapterSourceLink"></span>
+            </div>
+            <h3 id="readerChapterTitleHeading" class="text-xl sm:text-2xl font-bold leading-snug reader-serif">챕터 제목</h3>
+          </header>
+
+          <!-- Paragraphs Container -->
+          <div id="readerParagraphsContainer" class="space-y-5 reader-sans leading-relaxed" style="font-size: 14px;">
+            <!-- Populated dynamically -->
+          </div>
+
+          <!-- Bottom Chapter Navigation -->
+          <footer class="pt-8 border-t border-black/10 flex items-center justify-between gap-3">
+            <button id="readerBottomPrevBtn" type="button" class="px-4 py-2.5 rounded-xl border border-black/15 hover:bg-black/5 text-xs sm:text-sm font-semibold disabled:opacity-30 transition">
+              ← 이전 챕터
+            </button>
+            <span id="readerBottomProgressText" class="text-xs opacity-70 font-medium">1 / 1 챕터</span>
+            <button id="readerBottomNextBtn" type="button" class="px-4 py-2.5 rounded-xl border border-black/15 hover:bg-black/5 text-xs sm:text-sm font-semibold disabled:opacity-30 transition">
+              다음 챕터 →
+            </button>
+          </footer>
+        </div>
+      </article>
+    </section>
+
+  </main>
+
+
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- Modal 1: Novel / Passage Bookmark & Tag Editor Modal -->
+  <div id="bookmarkModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-5 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 id="bookmarkModalTitle" class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <svg class="w-5 h-5 text-amber-500 fill-amber-500" viewBox="0 0 24 24"><path d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/></svg>
+          <span>북마크 및 태그 설정</span>
+        </h3>
+        <button id="closeBookmarkModalBtn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+
+      <div id="bookmarkModalQuotePreview" class="hidden p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 italic whitespace-pre-wrap"></div>
+      <div id="bookmarkModalContext" class="hidden text-[11px] text-slate-500"></div>
+
+      <label class="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-200 cursor-pointer">
+        <span class="text-xs sm:text-sm font-semibold text-amber-950">북마크 활성화</span>
+        <input id="modalBookmarkActiveCheck" type="checkbox" checked class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500" />
+      </label>
+
+      <div class="space-y-1.5">
+        <label for="modalBookmarkTagInput" class="block text-xs font-semibold text-slate-700">북마크 태그 추가 (Enter 또는 추가 버튼)</label>
+        <div class="flex gap-2">
+          <input id="modalBookmarkTagInput" type="text" placeholder="예: angst, BDSM" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-amber-600" />
+          <button id="modalAddTagBtn" type="button" class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition">
+            + 태그 추가
+          </button>
+        </div>
+        <!-- Current tags chips -->
+        <div id="modalCurrentTagsContainer" class="flex flex-wrap gap-1.5 pt-2 min-h-[32px]"></div>
+      </div>
+
+      <!-- Existing tags quick select -->
+      <div class="space-y-1">
+        <span class="text-[11px] font-semibold text-slate-500">기존 사용 중인 태그 클릭하여 추가:</span>
+        <div id="modalExistingTagsSuggestions" class="flex flex-wrap gap-1"></div>
+      </div>
+
+      <div class="space-y-1">
+        <label for="modalBookmarkNoteInput" class="block text-xs font-semibold text-slate-700">북마크 메모 (선택)</label>
+        <input id="modalBookmarkNoteInput" type="text" placeholder="예: 주인공이 처음으로 진실을 알게 되는 장면" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-none focus:border-amber-600" />
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button id="cancelBookmarkModalBtn" type="button" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">취소</button>
+        <button id="saveBookmarkModalBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold">저장하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Edit Novel Title & Metadata Modal -->
+  <div id="editNovelModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-5 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-900">소설 제목 및 정보 수정</h3>
+        <button id="closeEditNovelModalBtn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label for="editModalTitleInput" class="block text-xs font-semibold text-slate-700 mb-1">소설 제목 <span class="text-rose-600">*</span></label>
+          <input id="editModalTitleInput" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:border-rose-600" />
+        </div>
+        <div>
+          <label for="editModalAuthorInput" class="block text-xs font-semibold text-slate-700 mb-1">원작자 / 출처</label>
+          <input id="editModalAuthorInput" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-rose-600" />
+        </div>
+        <div>
+          <label for="editModalFandomInput" class="block text-xs font-semibold text-slate-700 mb-1">원작 / 분류</label>
+          <input id="editModalFandomInput" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-rose-600" />
+        </div>
+        <div>
+          <label for="editModalSummaryInput" class="block text-xs font-semibold text-slate-700 mb-1">소개 / 메모</label>
+          <textarea id="editModalSummaryInput" rows="3" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-rose-600"></textarea>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button id="cancelEditNovelModalBtn" type="button" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">취소</button>
+        <button id="saveEditNovelModalBtn" type="button" class="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-semibold">수정 완료</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Delete Confirmation Modal (No browser confirm()) -->
+  <div id="deleteConfirmModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 max-w-sm w-full p-5 shadow-xl space-y-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 font-bold">!</div>
+        <div>
+          <h3 id="deleteModalTitle" class="text-base font-bold text-slate-900">소설 삭제 확인</h3>
+          <p id="deleteModalMessage" class="text-xs text-slate-600 mt-0.5">정말 이 소설을 책장에서 삭제하시겠습니까?</p>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button id="cancelDeleteModalBtn" type="button" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">취소</button>
+        <button id="confirmDeleteModalBtn" type="button" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold">삭제하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4A: General Translation & Appearance Settings -->
+  <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-900">번역 일반 설정</h3>
+        <button id="closeSettingsModalBtn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <section class="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-2" aria-label="앱 테마 설정">
+        <div>
+          <h4 class="text-sm font-bold text-slate-900">앱 테마</h4>
+          <p class="mt-1 text-[11px] text-slate-500">다크·라이트·그린 중 원하는 테마를 선택하세요. 선택한 테마는 유지됩니다.</p>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <button id="appThemeDarkBtn" type="button" aria-pressed="true" class="theme-choice-button rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold transition">🌙 다크모드</button>
+          <button id="appThemeLightBtn" type="button" aria-pressed="false" class="theme-choice-button rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold transition">☀️ 라이트모드</button>
+          <button id="appThemeGreenBtn" type="button" aria-pressed="false" class="theme-choice-button rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold transition">🌿 그린모드</button>
+        </div>
+      </section>
+
+        <!-- Custom Translation Prompt Box -->
+        <div class="space-y-1.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+          <div class="flex items-center justify-between gap-2">
+            <label for="translationPromptTextarea" class="block text-xs font-bold text-slate-800">
+              번역 모델 지시 프롬프트 (기본 프롬프트 적용됨)
+            </label>
+            <button id="resetDefaultPromptBtn" type="button" class="text-[11px] font-semibold text-rose-700 hover:underline">
+              기본 프롬프트로 복원
+            </button>
+          </div>
+          <textarea id="translationPromptTextarea" rows="5" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs leading-relaxed bg-white focus:outline-none focus:border-rose-600">한국어로 번역한다. 목표는 요약이나 기계적 직역이 아니라 출판 가능한 자연스러운 한국어 장편소설 문장이다. [서술 문체] 대사와 생각이 직접 인용된 부분을 제외한 일반 서술은 일관된 소설 문어체로 쓰고, 기본 종결은 과거형 -았다/-었다/-였다 및 필요한 연결형으로 유지한다. 서술문에 -해/-야/-거야/-했어요/-습니다 같은 구어체·대화체 종결을 섞지 않는다. 단, 인물의 실제 대사와 직접 인용된 내면 독백은 화자의 말투를 유지한다. 원문이 현재형이거나 의도적으로 단문을 반복할 때는 효과를 살리되, 문체를 기계적으로 통일하지 않는다. [한국어 재구성] 영어 어순과 수식어 순서를 그대로 따라가지 말고, 한국어에서 자연스러운 주어·목적어·수식어 순서로 문장을 다시 구성한다. 영어 관계절·분사구문·생략된 주어는 문맥에 맞게 풀어 쓰고, 문장 조각은 앞뒤 문장과 논리적으로 연결한다. 원문이 의도한 단문 리듬은 보존한다. [정확성] 모든 문장을 빠짐없이 번역하고 의미를 추가·삭제·완화하지 않는다. 관용구, 구동사, 신체·의학 용어, 성적 용어는 철자 유사성으로 추측하지 말고 문맥상 의미를 정확히 고른다. 인물의 성별·대명사·행위 주체·대상·시제·부정·인과관계를 유지한다. [문학성] 감정의 미묘함, 시점, 인물별 어휘와 말투, 반복과 리듬을 보존한다. 같은 표현을 문맥 없이 반복하지 말고, 한국어에서 어색한 명사화·피동·중복 주어·영어식 추상명사를 자연스럽게 고친다. [형식] 원문의 문단 순서와 문단 수, 장면 구분선을 유지한다. 대사는 따옴표 안에 두고 서술문과 대사의 말투 규칙을 혼동하지 않는다. 고유명사는 작품 내 통용 표기를 우선하고 지정 표기를 따른다. 원문에 있는 이탤릭은 강조 의미를 보존하되 마크다운 기호를 출력하지 않는다. 번역문만 출력하고 설명이나 주석을 붙이지 않는다. 출력 전 내부적으로 문장별 누락 여부, 한국어 어순, 조사, 용어, 서술 종결, 대사 말투를 검수하고 어색한 문장을 다시 쓴다.</textarea>
+          <p class="text-[11px] text-slate-500">
+            * 소설투(지문 <code class="font-mono">-니다</code> 금지), 서브컬처 통용 고유명사 최우선, 앞뒤 맥락 참조, 잘못된 줄바꿈 병합 및 장면 구분선 유지 지시가 번역 모델에 전달됩니다.
+          </p>
+        </div>
+
+
+
+        <div id="additionalPromptSettingsPanel" class="space-y-1.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+          <label for="characterStyleRulesTextarea" class="block text-xs font-bold text-slate-800">추가 프롬프트</label>
+          <textarea id="characterStyleRulesTextarea" rows="5" placeholder="예:
+이 작품의 번역은 차분하고 서정적인 문체를 유지하세요.
+인물 간 관계와 장면 맥락을 고려해 자연스럽게 번역하세요.
+특정 용어는 문맥에 맞게 일관되게 표기하세요." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono bg-white focus:outline-none focus:border-slate-500"></textarea>
+          <p class="text-[11px] text-slate-600 leading-relaxed">추가 지침은 번역 모델에 전달되는 일반 프롬프트에 덧붙습니다. 지원하지 않는 번역 엔진에서는 이 지침이 적용되지 않을 수 있습니다.</p>
+        </div>
+
+        <div>
+          <label for="glossaryTextarea" class="block text-xs font-semibold text-slate-700 mb-1">
+            번역 후 텍스트 치환 (잘못된 표기/올바른 표기)
+          </label>
+          <textarea id="glossaryTextarea" rows="5" placeholder="예:
+일랴/일리야
+드라코 말포이/드레이코 말포이
+잘못된 표기 => 올바른 표기" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm font-mono focus:outline-none focus:border-rose-600"></textarea>
+          <p class="text-[11px] text-slate-500 mt-1">AI 번역 지침으로 전달하지 않습니다. 번역이 끝난 본문에서 왼쪽 문자열을 찾아 오른쪽 문자열로 직접 바꿉니다. 한 줄에 하나씩 입력하세요. 예: <code>일랴/일리야</code> 또는 <code>일랴 => 일리야</code>.</p>
+        </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button id="saveSettingsModalBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold">일반 설정 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4B: API Providers & Usage -->
+  <div id="apiSettingsModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-900">API 설정 및 사용량</h3>
+        <button id="closeApiSettingsModalBtn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label for="translationEngineSelect" class="block text-xs font-semibold text-slate-700 mb-1">기본 번역 엔진 선택</label>
+          <select id="translationEngineSelect" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold bg-white focus:outline-none focus:border-rose-600">
+            <option value="gemini_api">자동 순차 번역 (Gemini → Workers AI → Groq → Azure 대체)</option>
+            <option value="free_gtx">무료 신경망 번역 엔진 (API 키 미입력 시 기본 폴백 · 소설체 후처리)</option>
+          </select>
+        </div>
+
+        <!-- Gemini Model & API Key Box -->
+        <div id="geminiApiKeyBox" class="space-y-2.5 p-3.5 rounded-xl bg-rose-50/60 border border-rose-200">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label for="geminiModelSelect" class="block text-xs font-semibold text-rose-950 mb-1">연결할 Gemini 모델</label>
+              <select id="geminiModelSelect" class="w-full px-3 py-2 rounded-lg border border-rose-200 text-xs font-semibold bg-white focus:outline-none focus:border-rose-600">
+                <option value="gemini-3.8-flash">gemini-3.8-flash (최신 안정 Flash · 소설 번역 기본 추천)</option>
+                <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (고처리량 · 저비용 대량 번역)</option>
+                <option value="gemini-3.6-flash">gemini-3.6-flash (속도와 품질의 균형)</option>
+                <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (번역·반복 작업 최적화)</option>
+              </select>
+            </div>
+            <div class="sm:col-span-2">
+              <label for="geminiApiKeysInput" class="block text-xs font-semibold text-rose-950 mb-1">Gemini API 키 여러 개 등록</label>
+              <textarea id="geminiApiKeysInput" rows="3" placeholder="API 키를 한 줄에 하나씩 붙여넣기" class="w-full px-3 py-2 rounded-lg border border-rose-200 text-xs font-mono bg-white focus:outline-none focus:border-rose-600"></textarea>
+              <p class="text-[11px] text-rose-900/75 mt-1">요청마다 키를 순환하고, 실패하면 나머지 키도 차례로 시도합니다. 같은 Google Cloud 프로젝트의 키는 사용 한도를 공유합니다.</p>
+            </div>
+          </div>
+          <p class="text-[11px] text-rose-900/80 leading-relaxed">
+            * 아래 지정된 <strong>소설 번역 프롬프트</strong>를 시스템 지시문(System Instruction)으로 엄격히 준수하여 번역합니다.
+          </p>
+        </div>
+
+        <!-- Cloudflare Workers AI: uses the Worker AI binding, no client API key needed -->
+        <div id="workersAiApiBox" class="space-y-2 p-3.5 rounded-xl bg-violet-50/70 border border-violet-200">
+          <label class="flex items-start gap-2 rounded-lg border border-violet-200 bg-white/80 p-2.5 cursor-pointer">
+            <input id="workersAiAutoEnabledInput" type="checkbox" class="mt-0.5 accent-violet-600" checked />
+            <span class="block">
+              <span class="block text-xs font-semibold text-violet-950">Cloudflare Workers AI 자동 사용</span>
+              <span class="block mt-0.5 text-[11px] leading-relaxed text-violet-900/80">Gemini가 실패하거나 결과 검사를 통과하지 못하면 두 번째로 시도합니다. Cloudflare Worker의 AI 바인딩을 사용하므로 API 키를 입력할 필요가 없습니다.</span>
+            </span>
+          </label>
+          <div>
+            <label for="workersAiModelInput" class="block text-xs font-semibold text-violet-950 mb-1">Workers AI 모델</label>
+            <select id="workersAiModelInput" class="w-full px-3 py-2 rounded-lg border border-violet-200 text-xs font-mono bg-white focus:outline-none focus:border-violet-600">
+              <option value="@cf/zai-org/glm-4.7-flash">@cf/zai-org/glm-4.7-flash · 다국어/비용 균형</option>
+              <option value="@cf/openai/gpt-oss-120b">@cf/openai/gpt-oss-120b · 고성능/비용 높음</option>
+            </select>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            <button id="testWorkersAiConnectionBtn" type="button" class="px-3 py-2 rounded-lg bg-violet-700 hover:bg-violet-800 text-white text-xs font-semibold disabled:opacity-50">Workers AI 연결 테스트</button>
+            <span id="workersAiTestStatus" class="text-xs text-violet-900/80" role="status" aria-live="polite">먼저 wrangler.jsonc에 AI 바인딩을 설정하고 배포하세요.</span>
+          </div>
+        </div>
+
+        <!-- Groq LLM API -->
+        <div id="groqApiKeyBox" class="space-y-2 p-3.5 rounded-xl bg-orange-50/70 border border-orange-200">
+          <label class="flex items-start gap-2 rounded-lg border border-orange-200 bg-white/80 p-2.5 cursor-pointer">
+            <input id="groqAutoEnabledInput" type="checkbox" class="mt-0.5 accent-orange-600" checked />
+            <span class="block">
+              <span class="block text-xs font-semibold text-orange-950">Groq 자동 사용</span>
+              <span class="block mt-0.5 text-[11px] leading-relaxed text-orange-900/80">끄면 Groq 요청은 보내지 않습니다. Gemini 실패 시 Workers AI를 먼저 시도하고, 이후 Azure 백업을 거쳐 무료 번역으로 넘어갑니다.</span>
+            </span>
+          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div class="sm:col-span-2">
+              <label for="groqApiKeyInput" class="block text-xs font-semibold text-orange-950 mb-1">Groq API 키</label>
+              <input id="groqApiKeyInput" type="password" autocomplete="off" placeholder="gsk_…" class="w-full px-3 py-2 rounded-lg border border-orange-200 text-xs font-mono bg-white focus:outline-none focus:border-orange-600" />
+            </div>
+            <div class="sm:col-span-2">
+              <label for="groqModelInput" class="block text-xs font-semibold text-orange-950 mb-1">Groq 모델 ID</label>
+              <input id="groqModelInput" type="text" value="openai/gpt-oss-120b" placeholder="예: openai/gpt-oss-120b 또는 qwen/qwen3.8-27b" class="w-full px-3 py-2 rounded-lg border border-orange-200 text-xs font-mono bg-white focus:outline-none focus:border-orange-600" />
+            </div>
+            <div class="sm:col-span-2 flex flex-wrap items-center gap-2 pt-1">
+              <button id="testGroqConnectionBtn" type="button" class="px-3 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold disabled:opacity-50">Groq 연결 테스트</button>
+              <span id="groqTestStatus" class="text-xs text-orange-900/80" role="status" aria-live="polite">짧은 문장으로 API 연결을 확인합니다.</span>
+            </div>
+          </div>
+        </div>
+
+        
+
+
+        <!-- Azure Translator API Key Box -->
+        <div id="azureApiKeyBox" class="space-y-2 p-3.5 rounded-xl bg-blue-50/70 border border-blue-200">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div class="sm:col-span-2">
+              <label for="azureApiKeyInput" class="block text-xs font-semibold text-blue-950 mb-1">Azure Translator 키</label>
+              <input id="azureApiKeyInput" type="password" placeholder="Azure Portal의 Translator Key" class="w-full px-3 py-2 rounded-lg border border-blue-200 text-xs font-mono bg-white focus:outline-none focus:border-blue-600" />
+            </div>
+            <div class="sm:col-span-2">
+              <label for="azureRegionInput" class="block text-xs font-semibold text-blue-950 mb-1">Azure 리전 (필요한 리소스에만 입력)</label>
+              <input id="azureRegionInput" type="text" placeholder="예: koreacentral 또는 eastus" class="w-full px-3 py-2 rounded-lg border border-blue-200 text-xs font-mono bg-white focus:outline-none focus:border-blue-600" />
+            </div>
+            <div class="sm:col-span-2">
+              <label for="azureQuotaTierInput" class="block text-xs font-semibold text-blue-950 mb-1">Azure Translator 할당량 계층 (한도 그래프용)</label>
+              <select id="azureQuotaTierInput" class="w-full px-3 py-2 rounded-lg border border-blue-200 text-xs font-mono bg-white focus:outline-none focus:border-blue-600">
+                <option value="unknown">모름 · 한도 퍼센트 계산 안 함</option>
+                <option value="F0">F0 무료 · 월 200만 자 / 시간당 200만 자</option>
+                <option value="S1">S1 종량제 · 월 고정 무료 할당량 없음 / 시간당 4,000만 자</option>
+                <option value="S2">S2 약정 · 월 2억 5천만 자 / 시간당 4,000만 자</option>
+                <option value="S3">S3 약정 · 월 10억 자 / 시간당 1억 2천만 자</option>
+                <option value="S4">S4 약정 · 월 100억 자 / 시간당 2억 자</option>
+              </select>
+              <p class="text-[10px] text-blue-900/75 mt-1">키만으로 계층을 자동 판별할 수 없어 직접 선택합니다. 실제 Azure 청구 주기·리소스의 한도는 포털에서 확인하세요.</p>
+            </div>
+            <div class="sm:col-span-2 flex flex-wrap items-center gap-2 pt-1">
+              <button id="testAzureConnectionBtn" type="button" class="px-3 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold disabled:opacity-50">Azure 연결 테스트</button>
+              <span id="azureTestStatus" class="text-xs text-blue-900/80" role="status" aria-live="polite">짧은 문장으로 연결·할당량을 확인합니다.</span>
+            </div>
+          </div>
+          <p class="text-[11px] text-blue-900/80 leading-relaxed">Gemini와 Workers AI 다음 우선순위입니다. Groq 요청이 지연되거나 실패하면 Azure가 병렬 백업을 시작해 먼저 검증을 통과한 결과를 사용합니다.</p>
+        </div>
+
+        <!-- Provider quota dashboard: one card per provider; unknown limits are never fabricated. -->
+        <section id="providerQuotaDashboard" class="provider-quota-dashboard rounded-xl border p-3.5 space-y-3" aria-labelledby="providerQuotaHeading">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h4 id="providerQuotaHeading" class="text-sm font-bold">API 할당량 · 사용량</h4>
+              <p class="provider-quota-intro mt-1 text-[11px] leading-relaxed">서비스별 한도 단위가 달라 각각의 기준을 사용합니다. 실제 계정 잔여량을 제공하지 않는 서비스는 이 앱에서 관측한 사용량만 표시합니다.</p>
+            </div>
+            <button id="refreshProviderQuotaBtn" type="button" class="shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold">다시 계산</button>
+          </div>
+          <div id="providerQuotaCards" class="grid grid-cols-1 gap-3" aria-live="polite">
+            <p class="provider-quota-intro text-xs">API 사용량 집계 정보를 불러오는 중…</p>
+          </div>
+          <p class="provider-quota-footnote text-[10px] leading-relaxed">사용량 기록은 이 브라우저에 저장됩니다. 다른 기기·앱에서 사용한 양은 포함되지 않을 수 있습니다. 키 여러 개는 서비스 한도 적용 범위를 확인할 수 없어 임의로 한도를 합산하지 않습니다.</p>
+        </section>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button id="saveApiSettingsModalBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold">API 설정 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: Backup, File Export & Google Drive Sync Modal -->
+  <div id="backupModal" aria-hidden="true" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs items-center justify-center p-4" style="display:none">
+    <div class="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-900">구글 드라이브 동기화 & 서재 백업/복원</h3>
+        <button id="closeBackupModalBtn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+
+      <!-- Google Drive Sync Configuration Card -->
+      <div class="p-4 rounded-xl bg-sky-50/80 border border-sky-200 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h4 class="text-xs sm:text-sm font-bold text-sky-950 flex items-center gap-1.5">
+              <span>☁️ Google Drive 동기화 (“AO3서재” 폴더 · drive.file)</span>
+            </h4>
+            <p id="driveModalStatusText" class="text-[11px] text-sky-800 mt-0.5">내 구글 드라이브의 “AO3서재” 폴더에 소설별 JSON 파일로 자동 저장합니다. API 키는 아래에서 별도 암호화 백업을 설정할 수 있습니다.</p>
+          </div>
+        </div>
+        <div class="space-y-1.5">
+          <label for="googleClientIdInput" class="block text-[11px] font-semibold text-sky-900">Google OAuth 클라이언트 ID (기본값 설정됨)</label>
+          <input id="googleClientIdInput" type="text" class="w-full px-3 py-1.5 rounded-lg border border-sky-200 text-xs font-mono bg-white focus:outline-none focus:border-sky-600" />
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <span id="driveLastSyncLabel" class="text-[11px] text-sky-900 font-medium">아직 동기화되지 않음</span>
+          <div class="flex items-center gap-1.5">
+            <button id="driveConnectAndSyncBtn" type="button" class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-2xs transition">
+              구글 로그인 & 지금 동기화
+            </button>
+            <button id="driveDisconnectBtn" type="button" class="hidden px-3 py-2 rounded-xl border border-sky-300 bg-white hover:bg-sky-100 text-sky-900 text-xs font-semibold transition">
+              연결 해제
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Encrypted settings vault: API keys are encrypted in the browser before upload. -->
+      <div class="p-3.5 rounded-xl bg-violet-50/70 border border-violet-200 space-y-3">
+        <div>
+          <h4 class="text-xs font-bold text-violet-950">🔐 API 키 암호화 백업</h4>
+          <p class="text-[11px] text-violet-900/80 mt-1">Gemini·Groq·Azure 키, Workers AI 모델 선택과 번역 설정을 암호화해 Drive에 보관합니다. 백업 암호는 Drive에 저장하지 않으므로 분실하면 복원할 수 없습니다. 브라우저 로컬 저장본은 기존 방식대로 별도 보관됩니다.</p>
+        </div>
+        <div>
+          <label for="driveSettingsVaultPassphrase" class="block text-[11px] font-semibold text-violet-950 mb-1">백업 암호 (다른 기기에서 복원할 때도 필요)</label>
+          <input id="driveSettingsVaultPassphrase" type="password" autocomplete="new-password" placeholder="암호 10자 이상" class="w-full px-3 py-2 rounded-lg border border-violet-200 text-xs font-mono bg-white focus:outline-none focus:border-violet-600" />
+        </div>
+        <label class="flex items-start gap-2 text-[11px] text-violet-950">
+          <input id="driveSettingsVaultRememberSession" type="checkbox" checked class="mt-0.5 rounded border-violet-300" />
+          <span>이 탭 세션에서 암호를 기억해 새로고침 후 자동 복원 (탭/브라우저 세션이 끝나면 다시 입력)</span>
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button id="driveSettingsVaultSaveBtn" type="button" class="flex-1 py-2 px-3 rounded-xl bg-violet-700 hover:bg-violet-800 text-white text-xs font-semibold">암호화해 Drive에 저장</button>
+          <button id="driveSettingsVaultRestoreBtn" type="button" class="flex-1 py-2 px-3 rounded-xl border border-violet-300 bg-white hover:bg-violet-100 text-violet-900 text-xs font-semibold">Drive에서 복원</button>
+        </div>
+      </div>
+
+      <!-- Local File Download / Upload Backup -->
+      <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-800">💾 로컬 파일(.json)로 백업 내려받기 / 불러오기</span>
+          <span class="text-[11px] text-emerald-700 font-semibold">IndexedDB 대용량 저장 활성</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="downloadBackupFileBtn" type="button" class="flex-1 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition text-center">
+            ⬇ 백업 파일(.json) 내려받기
+          </button>
+          <input id="uploadBackupFileInput" type="file" accept=".json,application/json" class="hidden" />
+          <button id="uploadBackupFileBtn" type="button" class="flex-1 py-2 px-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-xs font-semibold transition text-center">
+            ⬆ 백업 파일(.json) 불러오기
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <label for="backupJsonTextarea" class="text-xs font-semibold text-slate-700">서재 전체 데이터 (JSON 텍스트 복사/붙여넣기)</label>
+          <button id="copyBackupJsonBtn" type="button" class="text-xs font-semibold text-rose-700 hover:underline">클립보드에 복사</button>
+        </div>
+        <textarea id="backupJsonTextarea" rows="4" class="w-full p-3 rounded-xl border border-slate-200 text-xs font-mono bg-slate-50 focus:bg-white focus:outline-none focus:border-rose-600"></textarea>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button id="restoreBackupJsonBtn" type="button" class="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-semibold">위 JSON 데이터로 서재 복원/병합하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- Application Script -->
+  <script src="/assets/app.js?v=79.0"></script>
+
+  <script id="ao3QueueWidgetBootV4" src="/assets/queue-widget-v44.js?v=74.0"></script>
+
+</body>
+</html>
