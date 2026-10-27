@@ -13,6 +13,6 @@ const removed = [
 for (const phrase of removed) {
   if (html.includes(phrase) || app.includes(phrase)) throw new Error(`Removed helper copy still exists: ${phrase}`);
 }
-if (!html.includes('app.css?v=82.0') || !html.includes('app.js?v=84.0')) throw new Error('App asset cache versions were not updated');
+if (!html.includes('app.css?v=82.0') || !html.includes('app.js?v=85.0')) throw new Error('App asset cache versions were not updated');
 if (!app.includes("document.getElementById('customShelfCurrentDescription').textContent = '';")) throw new Error('Shelf description is not cleared');
 console.log('Bookshelf helper copy removal test passed.');

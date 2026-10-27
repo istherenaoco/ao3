@@ -18,6 +18,7 @@
       const DRIVE_LOGIN_HINT_KEY = 'ao3_google_drive_login_hint_v1';
       const DRIVE_SETTINGS_VAULT_FILE = 'ao3_settings_encrypted.json';
       const DRIVE_USER_PREFERENCES_FILE = 'ao3_user_preferences.json';
+      const DRIVE_PROVIDER_QUOTA_FILE = 'ao3_provider_quota_usage.json';
       const DRIVE_USER_PREFERENCES_TS_KEY = 'ao3_user_preferences_drive_updated_at_v1';
       const DRIVE_SETTINGS_VAULT_SESSION_KEY = 'ao3_drive_settings_vault_passphrase_session_v1';
       const IDB_NAME = 'ao3_korean_library_idb_v1';
@@ -33,6 +34,8 @@
       // Keep the selected model compatible with the current Gemini generateContent endpoint.
       // Gemini 4 Argon is intentionally not listed here: it is paid-only and uses the Interactions API.
       const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+      const GEMINI_REQUEST_TIMEOUT_MS = 30000;
+      const GEMINI_MAX_KEY_ATTEMPTS_PER_BATCH = 2;
       const SUPPORTED_GEMINI_MODELS = new Set([
         'gemini-3.8-flash',
         'gemini-3.6-flash',
@@ -51,6 +54,11 @@
       // returns an authoritative rate-limit header. Never present unavailable account limits as exact.
       const AO3_PROVIDER_QUOTA_STORAGE_KEY = 'ao3_provider_quota_usage_v1';
       const AO3_PROVIDER_QUOTA_MAX_AGE_MS = 45 * 24 * 60 * 60 * 1000;
+      const AO3_PROVIDER_QUOTA_DRIVE_DEBOUNCE_MS = 5000;
+      let driveProviderQuotaSyncPromise = null;
+      let driveProviderQuotaSyncTimer = null;
+      let driveProviderQuotaRevision = 0;
+      let providerQuotaBoundaryRefreshTimer = null;
       function ao3LoadQuotaStore() {
         try {
           const value = JSON.parse(localStorage.getItem(AO3_PROVIDER_QUOTA_STORAGE_KEY) || '{}');
@@ -59,13 +67,126 @@
       }
       function ao3SaveQuotaStore(store) {
         try { localStorage.setItem(AO3_PROVIDER_QUOTA_STORAGE_KEY, JSON.stringify(store)); } catch (ignoreQuotaStoreWrite) {}
+        driveProviderQuotaRevision++;
+        ao3ScheduleProviderQuotaDriveSync();
+      }
+      function ao3MergeQuotaStores(localStore, remoteStore) {
+        const eventsById = new Map();
+        [remoteStore, localStore].forEach(function(source) {
+          (source && Array.isArray(source.events) ? source.events : []).forEach(function(event, index) {
+            if (!event || !event.provider || !Number.isFinite(Number(event.at))) return;
+            const id = String(event.id || (event.provider + ':' + event.at + ':' + index));
+            const current = eventsById.get(id);
+            const version = Number(event.updatedAt || event.at);
+            if (!current || version >= Number(current.updatedAt || current.at)) eventsById.set(id, Object.assign({}, event, { id: id }));
+          });
+        });
+        const cutoff = Date.now() - AO3_PROVIDER_QUOTA_MAX_AGE_MS;
+        const events = Array.from(eventsById.values()).filter(function(event) { return Number(event.at) >= cutoff; })
+          .sort(function(a, b) { return Number(a.at) - Number(b.at); }).slice(-5000);
+        const snapshots = {};
+        [remoteStore, localStore].forEach(function(source) {
+          const sourceSnapshots = source && source.snapshots || {};
+          Object.keys(sourceSnapshots).forEach(function(provider) {
+            const candidate = sourceSnapshots[provider];
+            const current = snapshots[provider];
+            if (candidate && (!current || Number(candidate.observedAt || 0) >= Number(current.observedAt || 0))) {
+              snapshots[provider] = Object.assign({}, candidate);
+            }
+          });
+        });
+        return { events: events, snapshots: snapshots };
+      }
+      function ao3UpdateProviderQuotaStorageNote() {
+        const note = document.getElementById('providerQuotaStorageNote');
+        if (!note) return;
+        if (!isDriveTokenValid()) {
+          note.textContent = '사용량 기록은 이 브라우저에 저장 중입니다. Drive에 연결하면 다른 기기와 동기화됩니다.';
+        } else if (window._ao3DriveNeedsQuotaSync) {
+          note.textContent = '사용량 기록을 브라우저에 저장했고 Google Drive에 동기화하고 있습니다.';
+        } else {
+          note.textContent = '사용량 기록은 브라우저와 연결된 Google Drive에 저장되며, 다른 기기와 합쳐집니다.';
+        }
+      }
+      function ao3ScheduleProviderQuotaDriveSync() {
+        window._ao3DriveNeedsQuotaSync = true;
+        ao3UpdateProviderQuotaStorageNote();
+        if (!isDriveTokenValid()) return;
+        if (driveProviderQuotaSyncTimer) clearTimeout(driveProviderQuotaSyncTimer);
+        driveProviderQuotaSyncTimer = setTimeout(function() {
+          driveProviderQuotaSyncTimer = null;
+          ensureDriveBookshelfFolder().then(function(folderId) {
+            return syncProviderQuotaWithGoogleDrive(folderId);
+          }).catch(function(error) {
+            window._ao3DriveNeedsQuotaSync = true;
+            ao3UpdateProviderQuotaStorageNote();
+            console.warn('Provider quota Drive sync failed:', error);
+          });
+        }, AO3_PROVIDER_QUOTA_DRIVE_DEBOUNCE_MS);
+      }
+      async function findProviderQuotaDriveFile(folderId) {
+        const q = "'" + folderId + "' in parents and name = '" + DRIVE_PROVIDER_QUOTA_FILE + "' and trashed = false";
+        const res = await driveApiFetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name,modifiedTime)');
+        if (!res.ok) throw new Error('Google Drive usage file lookup failed (HTTP ' + res.status + ')');
+        const data = await res.json();
+        return data.files && data.files.length ? data.files[0] : null;
+      }
+      async function writeProviderQuotaDriveFile(folderId, file, payload) {
+        const boundary = '-------ao3quota' + Date.now();
+        const metadata = file ? { name: DRIVE_PROVIDER_QUOTA_FILE, mimeType: 'application/json' }
+          : { name: DRIVE_PROVIDER_QUOTA_FILE, mimeType: 'application/json', parents: [folderId] };
+        const body = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) + '\r\n' +
+          '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(payload) + '\r\n--' + boundary + '--';
+        const url = file ? 'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(file.id) + '?uploadType=multipart&fields=id'
+          : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id';
+        const res = await driveApiFetch(url, { method: file ? 'PATCH' : 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: body });
+        if (!res.ok) throw new Error('Google Drive usage file write failed (HTTP ' + res.status + ')');
+        return res.json();
+      }
+      function syncProviderQuotaWithGoogleDrive(folderId) {
+        if (!isDriveTokenValid()) return Promise.resolve();
+        if (driveProviderQuotaSyncPromise) return driveProviderQuotaSyncPromise;
+        const revisionAtStart = driveProviderQuotaRevision;
+        driveProviderQuotaSyncPromise = (async function() {
+          const file = await findProviderQuotaDriveFile(folderId);
+          let remoteStore = { events: [], snapshots: {} };
+          let remoteUpdatedAt = 0;
+          if (file) {
+            const res = await driveApiFetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(file.id) + '?alt=media');
+            if (!res.ok) throw new Error('Google Drive usage file read failed (HTTP ' + res.status + ')');
+            const remote = await res.json();
+            if (remote && remote.kind === 'ao3-provider-quota-usage' && remote.schemaVersion === 1) {
+              remoteStore = remote.usage || remoteStore;
+              remoteUpdatedAt = Number(remote.updatedAt || 0);
+            }
+          }
+          const localStore = ao3LoadQuotaStore();
+          const merged = ao3MergeQuotaStores(localStore, remoteStore);
+          const remoteJson = JSON.stringify(remoteStore);
+          const mergedJson = JSON.stringify(merged);
+          if (!file || mergedJson !== remoteJson) {
+            await writeProviderQuotaDriveFile(folderId, file, {
+              kind: 'ao3-provider-quota-usage', schemaVersion: 1,
+              updatedAt: Math.max(Date.now(), remoteUpdatedAt + 1), usage: merged
+            });
+          }
+          try { localStorage.setItem(AO3_PROVIDER_QUOTA_STORAGE_KEY, mergedJson); } catch (ignoreQuotaMergedWrite) {}
+          window._ao3DriveNeedsQuotaSync = driveProviderQuotaRevision !== revisionAtStart;
+          if (!window._ao3DriveNeedsQuotaSync) window._ao3DriveQuotaSyncedAt = Date.now();
+          ao3UpdateProviderQuotaStorageNote();
+          ao3RefreshProviderQuotaDashboard();
+        })().finally(function() {
+          driveProviderQuotaSyncPromise = null;
+          if (driveProviderQuotaRevision !== revisionAtStart) ao3ScheduleProviderQuotaDriveSync();
+        });
+        return driveProviderQuotaSyncPromise;
       }
       function ao3RecordQuotaUsage(provider, chars, extra) {
         const now = Date.now();
         const store = ao3LoadQuotaStore();
         const event = {
           id: now.toString(36) + Math.random().toString(36).slice(2, 8),
-          provider: String(provider || ''), at: now,
+          provider: String(provider || ''), at: now, updatedAt: now,
           chars: Math.max(0, Number(chars) || 0), requests: 1,
           inputTokens: 0, outputTokens: 0,
           model: String(extra && extra.model || '').slice(0, 100),
@@ -83,6 +204,7 @@
         const store = ao3LoadQuotaStore();
         const item = store.events.find(function(event) { return event.id === eventId; });
         if (!item) return;
+        item.updatedAt = Date.now();
         if (details && Number.isFinite(Number(details.inputTokens))) item.inputTokens = Math.max(0, Number(details.inputTokens));
         if (details && Number.isFinite(Number(details.outputTokens))) item.outputTokens = Math.max(0, Number(details.outputTokens));
         if (details && details.status) item.status = String(details.status).slice(0, 30);
@@ -131,8 +253,9 @@
         const reset = Number(snapshot.lastRetryAt) > Date.now() ? ' · 재시도 ' + ao3QuotaCountdown(snapshot.lastRetryAt) : '';
         return '최근 응답: ' + (labels[snapshot.lastCategory] || 'API 응답') + ' (' + (snapshot.lastStatus || '?') + ', ' + when + ')' + reset + (snapshot.lastError ? ' · ' + String(snapshot.lastError).slice(0,140) : '');
       }
-      function ao3CaptureGroqQuotaHeaders(headers) {
+      function ao3CaptureGroqQuotaHeaders(headers, model) {
         if (!headers || typeof headers.get !== 'function') return;
+        const modelKey = 'groq:' + String(model || '').trim();
         const read = function(name) { const value = headers.get('X-Groq-' + name); return value == null || value === '' ? null : value; };
         const parseHeaderNumber = function(value) { return value === null ? NaN : Number(value); };
         const limitRequests = parseHeaderNumber(read('RateLimit-Limit-Requests'));
@@ -151,15 +274,17 @@
         };
         if (Number.isFinite(limitRequests) && limitRequests > 0 && Number.isFinite(remainingRequests)) {
           const store = ao3LoadQuotaStore();
-          const previous = store.snapshots.groq || {};
-          store.snapshots.groq = Object.assign({}, previous, {
+          const previous = store.snapshots[modelKey] || {};
+          const snapshot = Object.assign({}, previous, {
             requestLimit: limitRequests, requestsRemaining: Math.max(0, remainingRequests),
             requestResetAt: parseReset(read('RateLimit-Reset-Requests')),
             tokenLimit: Number.isFinite(limitTokens) && limitTokens > 0 ? limitTokens : null,
             tokensRemaining: Number.isFinite(remainingTokens) ? Math.max(0, remainingTokens) : null,
             tokenResetAt: parseReset(read('RateLimit-Reset-Tokens')),
-            observedAt: Date.now()
+            model: String(model || '').trim(), observedAt: Date.now()
           });
+          store.snapshots[modelKey] = snapshot;
+          store.snapshots.groq = Object.assign({}, snapshot);
           ao3SaveQuotaStore(store);
           ao3RefreshProviderQuotaDashboard();
         }
@@ -181,6 +306,15 @@
       function ao3QuotaCount(provider, startAt, endAt) {
         const store = ao3LoadQuotaStore();
         const events = store.events.filter(function(event) { return event.provider === provider && Number(event.at) >= startAt && Number(event.at) < endAt; });
+        return events.reduce(function(result, event) {
+          result.requests += Number(event.requests || 0); result.chars += Number(event.chars || 0);
+          result.inputTokens += Number(event.inputTokens || 0); result.outputTokens += Number(event.outputTokens || 0);
+          return result;
+        }, { requests: 0, chars: 0, inputTokens: 0, outputTokens: 0 });
+      }
+      function ao3QuotaCountModel(provider, model, startAt, endAt) {
+        const store = ao3LoadQuotaStore();
+        const events = store.events.filter(function(event) { return event.provider === provider && (!model || event.model === model) && Number(event.at) >= startAt && Number(event.at) < endAt; });
         return events.reduce(function(result, event) {
           result.requests += Number(event.requests || 0); result.chars += Number(event.chars || 0);
           result.inputTokens += Number(event.inputTokens || 0); result.outputTokens += Number(event.outputTokens || 0);
@@ -230,8 +364,13 @@
       function ao3ProviderQuotaCard(name, configuredText, meters, resetText, note) {
         return '<article class="quota-provider-card"><div class="quota-provider-head"><h5>' + name + '</h5><span>' + configuredText + '</span></div>' + meters + '<div class="quota-reset"><span>리셋</span><strong>' + resetText + '</strong></div><p class="quota-provider-note">' + note + '</p></article>';
       }
+      function ao3NextProviderQuotaRefreshAt() {
+        const now = Date.now(); const store = ao3LoadQuotaStore(); const candidates = [ao3NextZonedMidnight('America/Los_Angeles'), ao3NextZonedMidnight('UTC'), new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).getTime()]; const groq = store.snapshots.groq || {}; [groq.requestResetAt, groq.tokenResetAt].forEach(function(v) { if (Number(v) > now) candidates.push(Number(v)); }); store.events.forEach(function(event) { if (event.provider === 'azure' && Number(event.at) > now - 3600000) candidates.push(Number(event.at) + 3600000); }); return candidates.filter(function(v) { return Number(v) > now; }).sort(function(a,b) { return a-b; })[0] || now + 60000;
+      }
+      function ao3ScheduleProviderQuotaBoundaryRefresh() { if (providerQuotaBoundaryRefreshTimer) clearTimeout(providerQuotaBoundaryRefreshTimer); const target = ao3NextProviderQuotaRefreshAt(); providerQuotaBoundaryRefreshTimer = setTimeout(function() { providerQuotaBoundaryRefreshTimer = null; const modal = document.getElementById('apiSettingsModal'); if (modal && !modal.classList.contains('hidden')) ao3RefreshProviderQuotaDashboard(); }, Math.max(1000, Math.min(2147483000, target - Date.now() + 150))); }
       function ao3RefreshProviderQuotaDashboard() {
         const host = document.getElementById('providerQuotaCards');
+        ao3UpdateProviderQuotaStorageNote();
         if (!host) return;
         const store = ao3LoadQuotaStore();
         const now = Date.now(); const dayStart = ao3QuotaDayStart(); const monthStart = ao3QuotaMonthStart();
@@ -245,12 +384,14 @@
         const geminiInput = document.getElementById('geminiApiKeysInput');
         const geminiKeys = String((apiSettingsOpen && geminiInput ? geminiInput.value : (state.settings.geminiApiKeys || state.settings.geminiApiKey || '')) || '').split(/[\r\n,;]+/).map(function(value) { return value.trim(); }).filter(Boolean);
         const groqInput = document.getElementById('groqApiKeyInput');
+        const groqModelInput = document.getElementById('groqModelInput');
+        const groqModel = String((apiSettingsOpen && groqModelInput ? groqModelInput.value : state.settings.groqModel) || 'openai/gpt-oss-120b').trim();
         const groqHasKey = Boolean(String((apiSettingsOpen && groqInput ? groqInput.value : state.settings.groqApiKey) || '').trim() || (window._ao3CloudflareServerProviders && window._ao3CloudflareServerProviders.groq));
         const azureInput = document.getElementById('azureApiKeyInput');
         const azureHasKey = Boolean(String((apiSettingsOpen && azureInput ? azureInput.value : state.settings.azureApiKey) || '').trim() || (window._ao3CloudflareServerProviders && window._ao3CloudflareServerProviders.azure));
         const workersReady = Boolean(window._ao3CloudflareServerProviders && window._ao3CloudflareServerProviders.workersAI);
         const model = String((document.getElementById('geminiModelSelect') && apiSettingsOpen ? document.getElementById('geminiModelSelect').value : state.settings.geminiModel) || DEFAULT_GEMINI_MODEL);
-        const gemini = getStats('gemini'); const workers = getStats('workers-ai'); const groq = getStats('groq'); const azure = getStats('azure');
+        const gemini = getStats('gemini'); const workers = getStats('workers-ai'); const groq = getStats('groq'); const groqModelDay = ao3QuotaCountModel('groq', groqModel, dayStart, endFuture); const groqModelMonth = ao3QuotaCountModel('groq', groqModel, monthStart, endFuture); const azure = getStats('azure');
         const geminiSnap = store.snapshots.gemini || {};
         const geminiLimit = geminiKeys.length === 1 && geminiSnap.model === model && Number(geminiSnap.dailyLimit) > 0 && Number(geminiSnap.observedAt) > now - 30 * 86400000 ? Number(geminiSnap.dailyLimit) : null;
         const geminiPct = geminiLimit ? ao3QuotaPct(gemini.day.requests, geminiLimit) : null;
@@ -266,16 +407,16 @@
           'UTC 자정까지 ' + ao3QuotaCountdown(ao3NextZonedMidnight('UTC')),
           '<a href="https://developers.cloudflare.com/workers-ai/platform/pricing/" target="_blank" rel="noopener noreferrer">공식 할당량·요금 확인 ↗</a>');
 
-        const groqSnap = store.snapshots.groq || {};
+        const groqSnap = store.snapshots['groq:' + groqModel] || store.snapshots.groq || {};
         const groqSnapFresh = Number(groqSnap.observedAt) > now - 7 * 86400000;
         const groqLimit = groqSnapFresh && Number(groqSnap.requestLimit) > 0 ? Number(groqSnap.requestLimit) : null;
         const groqRemain = groqLimit !== null ? Number(groqSnap.requestsRemaining) : null;
-        const groqDailyUsed = groqLimit !== null ? Math.max(0, groqLimit - groqRemain) : groq.day.requests;
-        const groqDailyText = groqLimit !== null ? ao3QuotaFmt(groqRemain) + ' / ' + ao3QuotaFmt(groqLimit) + '회 남음' : ao3QuotaFmt(groq.day.requests) + '회 관측 · 한도 미수신';
+        const groqDailyUsed = groqLimit !== null ? Math.max(0, groqLimit - groqRemain) : groqModelDay.requests;
+        const groqDailyText = groqLimit !== null ? ao3QuotaFmt(groqRemain) + ' / ' + ao3QuotaFmt(groqLimit) + '회 남음' : ao3QuotaFmt(groqModelDay.requests) + '회 관측 · 모델 한도 미수신';
         const groqDailyNote = groqLimit !== null ? '마지막 Groq 응답의 조직 단위 RPD 헤더입니다. 마지막 관측 ' + ao3QuotaCountdown(now + Math.max(0, 7 * 86400000 - (now - Number(groqSnap.observedAt)))) + ' 만료.' : '번역 요청 응답에 한도 헤더가 포함되면 자동 표시됩니다. 현재는 이 앱의 요청 수만 집계합니다.';
         const groqReset = groqSnapFresh && Number(groqSnap.requestResetAt) > now ? ao3QuotaCountdown(groqSnap.requestResetAt) : '다음 Groq 응답 헤더에서 확인';
         const groqCard = ao3ProviderQuotaCard('Groq', groqHasKey ? '키 등록됨' : '키 미등록',
-          ao3QuotaMeter('일일 요청(RPD)', groqDailyText, groqLimit !== null ? ao3QuotaPct(groqDailyUsed, groqLimit) : null, groqDailyNote) + ao3QuotaMeter('분당 토큰(TPM)', groqSnapFresh && Number(groqSnap.tokenLimit) > 0 ? ao3QuotaFmt(groqSnap.tokensRemaining) + ' / ' + ao3QuotaFmt(groqSnap.tokenLimit) + ' 토큰 남음' : '한도 헤더 미수신', groqSnapFresh && Number(groqSnap.tokenLimit) > 0 ? ao3QuotaPct(Number(groqSnap.tokenLimit) - Number(groqSnap.tokensRemaining), Number(groqSnap.tokenLimit)) : null, 'TPM 제한은 RPD와 별도로 적용됩니다. ' + ao3QuotaErrorNote('groq')) + ao3QuotaMeter('월간 앱 사용량', ao3QuotaFmt(groq.month.requests) + '회 · ' + ao3QuotaFmt(groq.month.chars) + '자', null, 'Groq API는 보편적인 고정 월간 요청 한도를 제공하지 않습니다. 월별 비용/사용량은 계정에 따라 달라집니다.'),
+          ao3QuotaMeter('일일 요청(RPD)', groqDailyText, groqLimit !== null ? ao3QuotaPct(groqDailyUsed, groqLimit) : null, groqDailyNote) + ao3QuotaMeter('분당 토큰(TPM)', groqSnapFresh && Number(groqSnap.tokenLimit) > 0 ? ao3QuotaFmt(groqSnap.tokensRemaining) + ' / ' + ao3QuotaFmt(groqSnap.tokenLimit) + ' 토큰 남음' : '한도 헤더 미수신', groqSnapFresh && Number(groqSnap.tokenLimit) > 0 ? ao3QuotaPct(Number(groqSnap.tokenLimit) - Number(groqSnap.tokensRemaining), Number(groqSnap.tokenLimit)) : null, 'TPM 제한은 RPD와 별도로 적용됩니다. ' + ao3QuotaErrorNote('groq')) + ao3QuotaMeter('월간 앱 사용량', ao3QuotaFmt(groqModelMonth.requests) + '회 · ' + ao3QuotaFmt(groqModelMonth.chars) + '자', null, '?? ?? ??(' + groqModel + ')? ?? ? ??????. ??? ??? ?? ?? ??? ?? ?????.'),
           groqReset,
           '<a href="https://console.groq.com/settings/limits" target="_blank" rel="noopener noreferrer">Groq 한도 ↗</a>');
 
@@ -303,6 +444,7 @@
           (tierInfo && tierInfo.month ? azureMonthReset + ' · ' : '') + azureHourReset,
           '<a href="https://learn.microsoft.com/ko-kr/azure/ai-services/Translator/service-limits" target="_blank" rel="noopener noreferrer">Azure 시간당 한도 ↗</a> · <a href="https://azure.microsoft.com/ko-kr/pricing/details/translator/" target="_blank" rel="noopener noreferrer">가격·월간 포함량 ↗</a>');
         host.innerHTML = geminiCard + workersCard + groqCard + azureCard;
+        ao3ScheduleProviderQuotaBoundaryRefresh();
       }
 
       // Default starter novel so the user can immediately test the viewer, bookmarks, tags, and chapter binding
@@ -833,6 +975,13 @@
             // Wait for the local IndexedDB library to finish loading before comparing/uploading data.
             await libraryHydrationPromise;
             if (isDriveTokenValid()) {
+              try {
+                const quotaFolderId = await ensureDriveBookshelfFolder();
+                await syncProviderQuotaWithGoogleDrive(quotaFolderId);
+              } catch (quotaSyncError) {
+                window._ao3DriveNeedsQuotaSync = true;
+                console.warn('Automatic provider quota Drive sync failed:', quotaSyncError);
+              }
               await syncWithGoogleDrive(true);
               if (isDriveTokenValid() && state.drive.lastSyncAt) {
                 await autoRestoreEncryptedSettingsAfterDriveConnect();
@@ -1554,7 +1703,11 @@
           // Independent small metadata documents stay first so settings/shelves are current.
           await Promise.all([
             syncDriveUserPreferencesWithGoogleDrive(folderId),
-            syncCustomShelvesWithGoogleDrive(folderId, false)
+            syncCustomShelvesWithGoogleDrive(folderId, false),
+            syncProviderQuotaWithGoogleDrive(folderId).catch(function(error) {
+              window._ao3DriveNeedsQuotaSync = true;
+              console.warn('Provider quota Drive sync failed:', error);
+            })
           ]);
           window._ao3DriveNeedsPreferencesSync = false;
           const remoteFiles = await listDriveFolderJsonFiles(folderId);
@@ -3306,7 +3459,7 @@
           if (requestTimeoutId) clearTimeout(requestTimeoutId);
           if (parentSignal && parentAbortHandler) parentSignal.removeEventListener('abort', parentAbortHandler);
         }
-        if (provider === 'groq') ao3CaptureGroqQuotaHeaders(response.headers);
+        if (provider === 'groq') ao3CaptureGroqQuotaHeaders(response.headers, model);
         const retryAfterHeader = response.headers.get('Retry-After');
         let retrySeconds = Number(retryAfterHeader || 0);
         let payload = null;
@@ -3397,7 +3550,7 @@
           'AO3 번역 실패 보고서',
           '시각: ' + new Date().toLocaleString('ko-KR'),
           '챕터: ' + String(chapterTitle || '(제목 없음)'),
-          '결과: API 공급자 순환 2회 후 중단. 원문은 번역 완료로 저장되지 않았습니다.',
+          '결과: API 공급자 순환 ' + Number(error && error.translationRoundsUsed || 1) + '회 후 중단. 원문은 번역 완료로 저장되지 않았습니다.',
           '최종 오류: ' + String(error && error.message || error || '알 수 없는 오류'),
           '', '공급자 시도 및 오류:', errors.length ? errors.join('\n') : '(기록 없음)'
         ].join('\n');
@@ -3410,25 +3563,50 @@
         setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
       }
 
+      function shouldRetryTranslationRound(error) {
+        const diagnostic = [error && error.message || error, getTranslationProviderErrorSummary()].join(' ').toLowerCase();
+        // Repeating the whole provider chain cannot fix a local timeout, invalid request,
+        // authentication failure, or exhausted shared quota; it only repeats billable work.
+        if (/(?:\b429\b|resource_exhausted|quota|rate.?limit|requests? per (?:minute|day)|\b(?:400|401|403|404)\b|unauthori[sz]ed|permission denied|timed?\s*out|timeout|abort(?:ed|error)?|signal is aborted)/i.test(diagnostic)) return false;
+        return /(?:\b408\b|\b50[0234]\b|failed to fetch|network(?:error| request failed)|connection (?:reset|closed|refused)|temporarily unavailable|service unavailable)/i.test(diagnostic);
+      }
+
       async function translateParagraphBatch(enStrings, contextMeta) {
         const maxRounds = 2;
+        let roundsUsed = 0;
         let lastError = null;
         for (let round = 1; round <= maxRounds; round++) {
+          roundsUsed = round;
           setTranslationProviderStatus('API', '공급자 순환 ' + round + '/' + maxRounds);
           try {
             return await translateParagraphBatchOnce(enStrings, contextMeta);
           } catch (error) {
             lastError = error;
-            if (round < maxRounds) await ao3Sleep(800);
+            if (round >= maxRounds || !shouldRetryTranslationRound(error)) break;
+            await ao3Sleep(800);
           }
         }
-        const message = '설정된 API 공급자를 2회 순환했지만 번역에 성공하지 못해 작업을 중단했습니다. ' +
+        const message = '설정된 API 공급자를 ' + roundsUsed + '회 순환했지만 번역에 성공하지 못해 작업을 중단했습니다. ' +
           String(lastError && lastError.message || lastError || '') +
           (getTranslationProviderErrorSummary() ? ' · ' + getTranslationProviderErrorSummary() : '');
         recordTranslationProviderError('작업 중단', message);
         const exhausted = new Error(message);
         exhausted.translationRoundsExhausted = true;
+        exhausted.translationRoundsUsed = roundsUsed;
         throw exhausted;
+      }
+
+      function ao3BuildProviderTextBatches(texts, maxItems, maxChars) {
+        const batches = []; let current = []; let currentChars = 0;
+        texts.forEach(function(text) {
+          const value = String(text || ''); const extra = value.length + (current.length ? 16 : 0);
+          if (current.length && (current.length >= maxItems || currentChars + extra > maxChars)) {
+            batches.push(current); current = []; currentChars = 0;
+          }
+          current.push(value); currentChars += value.length + (current.length > 1 ? 16 : 0);
+        });
+        if (current.length) batches.push(current);
+        return batches;
       }
 
       async function translateParagraphBatchOnce(enStrings, contextMeta) {
@@ -3454,7 +3632,7 @@
           let attemptedGeminiKeys = 0;
           // Bound the entire Gemini key-pool attempt for each batch. A list of several
           // slow keys must not multiply the fallback delay without limit.
-          const geminiBatchDeadline = Date.now() + 12000;
+          const geminiKeyAttemptLimit = Math.min(geminiKeys.length, GEMINI_MAX_KEY_ATTEMPTS_PER_BATCH);
           const systemInstructionText =
             '[번역 지침]\n' + customPrompt + characterStyleHint +
             fandomHint +
@@ -3463,20 +3641,21 @@
             (prevContextHint ? (prevContextHint + '\n\n[번역할 원문 문단들]:\n') : '') +
             preparedStrings.join(' <<<P_SEP>>> ');
 
-          for (let attempt = 0; attempt < geminiKeys.length; attempt++) {
-            const geminiRemainingMs = geminiBatchDeadline - Date.now();
-            if (geminiRemainingMs <= 0) break;
+          for (let attempt = 0; attempt < geminiKeyAttemptLimit; attempt++) {
             const keyIndex = (startIndex + attempt) % geminiKeys.length;
             const apiKey = geminiKeys[keyIndex];
             if (Number(geminiCooldowns[apiKey] || 0) > Date.now()) continue;
+            let geminiTimedOut = false;
+            let geminiQuotaEventId = null;
             attemptedGeminiKeys++;
             try {
               setTranslationProviderStatus('Gemini', '요청 중 · 키 ' + (keyIndex + 1));
               const geminiController = new AbortController();
-              const geminiTimeoutBudget = Math.max(500, Math.min(9000, geminiRemainingMs));
-              const geminiTimeoutId = setTimeout(function() { geminiController.abort(); }, geminiTimeoutBudget);
+              const geminiTimeoutId = setTimeout(function() {
+                geminiTimedOut = true;
+                geminiController.abort('Gemini request exceeded ' + GEMINI_REQUEST_TIMEOUT_MS + 'ms');
+              }, GEMINI_REQUEST_TIMEOUT_MS);
               let res;
-              let geminiQuotaEventId = null;
               try {
                 geminiQuotaEventId = ao3RecordQuotaUsage('gemini', preparedStrings.join('\n').length, { model: modelName });
                 res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(modelName) + ':generateContent?key=' + encodeURIComponent(apiKey), {
@@ -3485,7 +3664,7 @@
                   body: JSON.stringify({
                     systemInstruction: { parts: [{ text: systemInstructionText }] },
                     contents: [{ role: 'user', parts: [{ text: userContentText }] }],
-                    generationConfig: { temperature: 0.35 }
+                    generationConfig: { thinkingConfig: { thinkingLevel: 'low' } }
                   }),
                   signal: geminiController.signal
                 });
@@ -3518,7 +3697,8 @@
                   (geminiErrorDetail ? ' (' + geminiErrorDetail + ')' : '') +
                   (res.status === 429 ? '; cooling down this key temporarily, then trying the next key/fallback.' : '; trying next key/fallback.')
                 );
-                continue;
+                if (res.status === 401 || res.status === 403 || res.status === 429) continue;
+                break;
               }
               const data = await res.json();
               const usageMetadata = data && data.usageMetadata || {};
@@ -3543,10 +3723,20 @@
                 break;
               }
               recordTranslationProviderError('Gemini', '응답 문단 수가 원문과 일치하지 않아 결과를 채택하지 않았습니다.');
-              console.warn('Gemini response format mismatch; trying next key/fallback.');
+              console.warn('Gemini response format mismatch; moving to the next provider.');
+              break;
             } catch (err) {
               recordTranslationProviderError('Gemini 키 ' + (keyIndex + 1), err && err.message ? err.message : err);
-              console.warn('Gemini request failed; trying next key/fallback.', err && err.message ? err.message : err);
+              const message = geminiTimedOut
+                ? 'Gemini request timed out after ' + Math.round(GEMINI_REQUEST_TIMEOUT_MS / 1000) + ' seconds; usage is unknown, so this batch will fall through without another Gemini request.'
+                : (err && err.message ? err.message : String(err || 'Gemini request failed'));
+              ao3UpdateQuotaEvent(geminiQuotaEventId, { status: geminiTimedOut ? 'timeout-usage-unknown' : (err && err.name === 'AbortError' ? 'aborted-usage-unknown' : 'network-error') });
+              recordTranslationProviderError('Gemini key ' + (keyIndex + 1), message);
+              console.warn('Gemini request failed; ' + (geminiTimedOut || (err && err.name === 'AbortError') ? 'skipping further Gemini attempts for this batch.' : 'trying one alternate key or the next provider.'), message);
+              if (geminiTimedOut || (err && err.name === 'AbortError')) {
+                geminiCooldowns[apiKey] = Date.now() + 2 * 60 * 1000;
+                break;
+              }
             }
           }
           if (attemptedGeminiKeys === 0) {
@@ -3572,12 +3762,12 @@
           const baseContext = (contextMeta && contextMeta.prevContext) || '';
           const translated = [];
           try {
-            // Four-paragraph batches retain nearby context while halving serial round-trips
-            // compared with two-paragraph requests. A malformed batch is repaired locally.
-            const workersBatchSize = 4;
-            for (let start = 0; start < preparedStrings.length; start += workersBatchSize) {
-              const texts = preparedStrings.slice(start, start + workersBatchSize);
-              const recentContext = preparedStrings.slice(Math.max(0, start - 2), start).filter(Boolean).join('\n\n');
+            // Larger character-bounded batches cut round-trips and stay below the 12k Worker cap.
+            const workerBatches = ao3BuildProviderTextBatches(preparedStrings, 6, 9500);
+            let workersStart = 0;
+            for (let batchIndex = 0; batchIndex < workerBatches.length; batchIndex++) {
+              const texts = workerBatches[batchIndex];
+              const recentContext = preparedStrings.slice(Math.max(0, workersStart - 2), workersStart).filter(Boolean).join('\n\n');
               const prevContext = [baseContext, recentContext].filter(Boolean).join('\n\n').slice(-1800);
               let part = null;
               const workersContext = {
@@ -3600,6 +3790,7 @@
               }
               if (!part || part.length !== texts.length) throw new Error('Workers AI에서 번역 문단 수가 맞지 않는 결과를 반환했습니다.');
               translated.push.apply(translated, part);
+              workersStart += texts.length;
             }
             if (translated.length !== preparedStrings.length) throw new Error('Workers AI 번역 결과가 불완전합니다.');
             const clean = translated.map(function(text, idx) {
@@ -3643,13 +3834,13 @@
           }
           if (state.settings.groqEnabled !== false && (groqKey || groqServerSecretAvailable) && groqModel && Number(groqCooldowns.groq || 0) <= Date.now()) {
             try {
-              // Three paragraphs per request balance context, output size, and TPM budget.
-              // If alignment breaks, only that failed mini-batch is retried paragraph-by-paragraph.
-              const groqBatchSize = 3;
+              // Four paragraphs per call reduce requests; cap text below proxy limit.
+              const groqBatches = ao3BuildProviderTextBatches(preparedStrings, 4, 8000);
               const groqTranslations = [];
               const groqBaseContext = (contextMeta && contextMeta.prevContext) || '';
-              for (let groqStart = 0; groqStart < preparedStrings.length; groqStart += groqBatchSize) {
-                const groqTexts = preparedStrings.slice(groqStart, groqStart + groqBatchSize);
+              let groqStart = 0;
+              for (let groqBatchIndex = 0; groqBatchIndex < groqBatches.length; groqBatchIndex++) {
+                const groqTexts = groqBatches[groqBatchIndex];
                 const recentContext = preparedStrings.slice(Math.max(0, groqStart - 2), groqStart).filter(Boolean).join('\n\n');
                 const groqPrevContext = [groqBaseContext, recentContext].filter(Boolean).join('\n\n').slice(-1500);
                 let groqPartResult = null;
@@ -3681,6 +3872,7 @@
                 }
                 if (!groqPartResult) throw new Error('Groq did not return translations for a paragraph batch.');
                 groqTranslations.push.apply(groqTranslations, groqPartResult);
+                groqStart += groqTexts.length;
               }
               if (groqTranslations.length === preparedStrings.length) {
                 const cleanGroqTranslations = groqTranslations.map(function(text, idx) {
@@ -4171,7 +4363,7 @@
           setTranslationProviderStatus(window._ao3LastTranslationProvider || 'API', '실패');
           recordTranslationProviderError('번역 중단', err && err.message ? err.message : err);
           downloadTranslationFailureReport(ch.title, err);
-          showToast('API 공급자 순환 2회 후 번역을 중단했습니다. 실패 보고서를 다운로드하고 진행 창에 오류를 표시했습니다.', 'warning');
+          showToast('API 공급자 순환 ' + Number(err && err.translationRoundsUsed || 1) + '회 후 번역을 중단했습니다. 실패 보고서를 다운로드하고 진행 창에 오류를 표시했습니다.', 'warning');
         }
       }
 
@@ -4204,7 +4396,7 @@
             recordTranslationProviderError('챕터 ' + (i + 1), err && err.message ? err.message : err);
             downloadTranslationFailureReport(ch.title, err);
             setTranslationProviderStatus(window._ao3LastTranslationProvider || 'API', '실패');
-            showToast('API 공급자 순환 2회 후 번역을 중단했습니다. 실패 보고서를 다운로드하고 진행 창에 오류를 표시했습니다.', 'warning');
+            showToast('API 공급자 순환 ' + Number(err && err.translationRoundsUsed || 1) + '회 후 번역을 중단했습니다. 실패 보고서를 다운로드하고 진행 창에 오류를 표시했습니다.', 'warning');
             return false;
           }
         }
@@ -6963,6 +7155,13 @@
           const quotaModal = document.getElementById('apiSettingsModal');
           if (quotaModal && !quotaModal.classList.contains('hidden')) ao3RefreshProviderQuotaDashboard();
         }, 30000);
+        document.addEventListener('visibilitychange', function() {
+          if (!document.hidden) {
+            const quotaModal = document.getElementById('apiSettingsModal');
+            if (quotaModal && !quotaModal.classList.contains('hidden')) ao3RefreshProviderQuotaDashboard();
+          }
+        });
+        document.addEventListener('visibilitychange', function() { if (!document.hidden) { const modal = document.getElementById('apiSettingsModal'); if (modal && !modal.classList.contains('hidden')) ao3RefreshProviderQuotaDashboard(); } });
         document.getElementById('resetDefaultPromptBtn').addEventListener('click', function() {
           document.getElementById('translationPromptTextarea').value = DEFAULT_TRANSLATION_PROMPT;
           showToast('기본 소설 번역 프롬프트가 복원되었습니다.');

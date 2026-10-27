@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col selection:bg-rose-100 selection:text-rose-900">
-  <!-- AO3_BUILD=ao3-bookshelf-ui-v84.0 -->
+  <!-- AO3_BUILD=ao3-bookshelf-ui-v85.0 -->
 <!-- Top Navigation Header -->
   <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
@@ -948,7 +948,7 @@
           <div id="providerQuotaCards" class="grid grid-cols-1 gap-3" aria-live="polite">
             <p class="provider-quota-intro text-xs">API 사용량 집계 정보를 불러오는 중…</p>
           </div>
-          <p class="provider-quota-footnote text-[10px] leading-relaxed">사용량 기록은 이 브라우저에 저장됩니다. 다른 기기·앱에서 사용한 양은 포함되지 않을 수 있습니다. 키 여러 개는 서비스 한도 적용 범위를 확인할 수 없어 임의로 한도를 합산하지 않습니다.</p>
+          <p id="providerQuotaStorageNote" class="provider-quota-footnote text-[10px] leading-relaxed">사용량 기록은 브라우저에 저장되며, Google Drive 연결 시 다른 기기와 동기화됩니다. 앱 밖 사용량은 포함되지 않을 수 있습니다. 키 여러 개는 서비스 한도 적용 범위를 확인할 수 없어 임의로 한도를 합산하지 않습니다.</p>
         </section>
 
       <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -1046,7 +1046,7 @@
   <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
   <!-- Application Script -->
-  <script src="/assets/app.js?v=84.0"></script>
+  <script src="/assets/app.js?v=85.0"></script>
 
   <script id="ao3QueueWidgetBootV4" src="/assets/queue-widget-v44.js?v=74.0"></script>
 
