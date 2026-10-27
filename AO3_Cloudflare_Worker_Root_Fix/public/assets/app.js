@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '97';
+      window.__AO3_BUILD_VERSION__ = '98';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -47,6 +47,12 @@
         'gemini-3.5-flash-lite',
         'gemini-3.1-flash-lite'
       ]);
+      const GEMINI_MODEL_FALLBACKS = {
+        'gemini-3.8-flash': ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
+        'gemini-3.6-flash': ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'],
+        'gemini-3.5-flash-lite': ['gemini-3.1-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash'],
+        'gemini-3.1-flash-lite': ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash']
+      };
       function normalizeGeminiModel(model) {
         const value = String(model || '').trim();
         if (SUPPORTED_GEMINI_MODELS.has(value)) return value;
@@ -339,7 +345,7 @@
           const messageDelay = String(error.message || '').match(/retry\s+(?:in\s+)?([0-9]+(?:\.[0-9]+)?)\s*s(?:ec(?:ond)?s?)?/i);
           if (messageDelay) retryMs = Number(messageDelay[1]) * 1000;
         }
-        if (isDaily && !retryMs) {
+        if (isDaily) {
           // Gemini documents RPD reset at midnight Pacific; calculate that boundary with DST.
           const now = Date.now();
           const zone = 'America/Los_Angeles';
@@ -350,7 +356,8 @@
           const offsetParts = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' }).formatToParts(new Date(targetUtc));
           const getPart = function(type) { return Number(offsetParts.find(function(entry) { return entry.type === type; }).value); };
           const representedUtc = Date.UTC(getPart('year'), getPart('month') - 1, getPart('day'), getPart('hour'), getPart('minute'), getPart('second'));
-          retryMs = Math.max(60000, targetUtc - (representedUtc - targetUtc) - now);
+          const dailyResetMs = Math.max(60000, targetUtc - (representedUtc - targetUtc) - now);
+          retryMs = Math.max(retryMs, dailyResetMs);
         }
         if (!retryMs) retryMs = 60000;
         // A 429 is an explicit rate/quota signal. Scope it to this key and model only;
@@ -371,6 +378,54 @@
       }
       function ao3SaveGeminiCooldownStore(cooldowns) {
         try { localStorage.setItem('ao3-gemini-explicit-quota-cooldowns-v1', JSON.stringify(cooldowns || {})); } catch (ignoreGeminiCooldownWrite) {}
+      }
+      function ao3GetGeminiModelHealthStore() {
+        if (window._ao3GeminiModelHealth) return window._ao3GeminiModelHealth;
+        let saved = {};
+        try { saved = JSON.parse(localStorage.getItem('ao3-gemini-model-health-v1') || '{}') || {}; } catch (ignoreGeminiHealthRead) {}
+        window._ao3GeminiModelHealth = saved;
+        return saved;
+      }
+      function ao3SaveGeminiModelHealthStore(health) {
+        try { localStorage.setItem('ao3-gemini-model-health-v1', JSON.stringify(health || {})); } catch (ignoreGeminiHealthWrite) {}
+      }
+      function ao3IsGeminiHighDemand(status, payload) {
+        if (Number(status) === 429) return false;
+        const error = payload && payload.error || {};
+        const signal = [error.status, error.message, payload && payload.message].join(' ').toLowerCase();
+        return Number(status) === 503 || /\bUNAVAILABLE\b|experiencing high demand|temporarily overloaded|service unavailable/i.test(signal);
+      }
+      function ao3MarkGeminiModelOverloaded(model, payload, headers) {
+        const health = ao3GetGeminiModelHealthStore();
+        const previous = health[model] || {};
+        const failures = Math.min(8, Number(previous.overloadFailures || 0) + 1);
+        const fallbackMs = Math.min(2 * 60 * 1000, 30000 * Math.pow(2, failures - 1));
+        const error = payload && payload.error || {};
+        const retryHeader = headers && headers.get ? headers.get('Retry-After') : null;
+        let retryMs = 0;
+        if (retryHeader) {
+          const seconds = Number(retryHeader);
+          if (Number.isFinite(seconds) && seconds > 0) retryMs = seconds * 1000;
+          else { const retryAt = Date.parse(retryHeader); if (Number.isFinite(retryAt)) retryMs = retryAt - Date.now(); }
+        }
+        if (!retryMs && Array.isArray(error.details)) {
+          const retryDetail = error.details.find(function(detail) { return detail && detail.retryDelay; });
+          const match = retryDetail && String(retryDetail.retryDelay).match(/([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)/i);
+          if (match) retryMs = Number(match[1]) * ({ ms: 1, s: 1000, m: 60000, h: 3600000 }[match[2].toLowerCase()]);
+        }
+        const cooldownMs = Math.max(15000, Math.min(retryMs || fallbackMs, 2 * 60 * 1000));
+        const entry = { until: Date.now() + cooldownMs, overloadFailures: failures, lastOverloadAt: Date.now(), reason: String(error.message || '').slice(0, 220) };
+        health[model] = entry;
+        ao3SaveGeminiModelHealthStore(health);
+        return entry;
+      }
+      function ao3NextAvailableGeminiModel(model, triedModels) {
+        const health = ao3GetGeminiModelHealthStore();
+        const tried = new Set(Array.isArray(triedModels) ? triedModels : []);
+        const candidates = GEMINI_MODEL_FALLBACKS[model] || Array.from(SUPPORTED_GEMINI_MODELS).filter(function(candidate) { return candidate !== model; });
+        return candidates.find(function(candidate) {
+          return !tried.has(candidate) && SUPPORTED_GEMINI_MODELS.has(candidate) && Number(health[candidate] && health[candidate].until || 0) <= Date.now();
+        }) || '';
       }
       function ao3QuotaCount(provider, startAt, endAt) {
         const store = ao3LoadQuotaStore();
@@ -3867,7 +3922,7 @@
         return batches;
       }
 
-      async function translateParagraphBatchOnce(enStrings, contextMeta, manualProviderOverride) {
+      async function translateParagraphBatchOnce(enStrings, contextMeta, manualProviderOverride, geminiModelOverride, geminiModelsAlreadyTried) {
         // Text replacement rules apply only after translation, never to the source text.
         const preparedStrings = enStrings.map(function(s) {
           if (isSceneDividerLine(s)) return '* * *';
@@ -3880,6 +3935,21 @@
         const prevContextHint = (contextMeta && contextMeta.prevContext) ? ('\n[직전 문단 맥락(참고용, 번역 출력 제외)]: ' + contextMeta.prevContext) : '';
         const characterStyleHint = String(state.settings.characterStyleRules || '').trim() ? '\n[추가 프롬프트]\n' + String(state.settings.characterStyleRules).trim() + '\n기본 번역 지침과 충돌하면 원문의 의미와 문맥을 우선하고, 추가 지침은 해당 문맥에 맞게 적용하세요.' : '';
         const forcedProvider = manualProviderOverride || '';
+        const triedGeminiModels = new Set(Array.isArray(geminiModelsAlreadyTried) ? geminiModelsAlreadyTried : []);
+        let modelName = normalizeGeminiModel(geminiModelOverride || state.settings.geminiModel || DEFAULT_GEMINI_MODEL);
+        const modelHealth = ao3GetGeminiModelHealthStore();
+        if (Number(modelHealth[modelName] && modelHealth[modelName].until || 0) > Date.now()) {
+          const coolingModel = modelName;
+          triedGeminiModels.add(coolingModel);
+          modelName = ao3NextAvailableGeminiModel(coolingModel, Array.from(triedGeminiModels));
+          if (modelName) {
+            setTranslationProviderStatus('Gemini', coolingModel + ' 혼잡 냉각 중 · ' + modelName + '으로 임시 전환');
+            recordTranslationProviderError('Gemini 모델 전환', coolingModel + '의 과부하 냉각이 끝나지 않아 ' + modelName + '으로 우회했습니다.');
+          } else {
+            setTranslationProviderStatus('Gemini', coolingModel + ' 과부하 냉각 중 · 다른 Gemini 모델도 사용 불가');
+            recordTranslationProviderError('Gemini 모델 전환', '사용자가 선택한 ' + coolingModel + '과 대체 Gemini 모델이 과부하 냉각 중이라 다른 공급자로 전환합니다.');
+          }
+        }
         async function acceptOrManuallyRetry(translations) {
           const nextProvider = window._ao3ManualProviderRequested || '';
           if (nextProvider) {
@@ -3902,8 +3972,7 @@
         // 1. Gemini key pool: round-robin across requests, try every configured key on failure.
         const geminiKeys = Array.from(new Set(String(state.settings.geminiApiKeys || state.settings.geminiApiKey || '')
           .split(/[\r\n,;]+/).map(function(k) { return k.trim(); }).filter(Boolean)));
-        if ((!forcedProvider || forcedProvider === 'gemini') && geminiKeys.length) {
-          const modelName = (state.settings.geminiModel || DEFAULT_GEMINI_MODEL).trim();
+        if ((!forcedProvider || forcedProvider === 'gemini') && geminiKeys.length && modelName) {
           const startIndex = (window._ao3GeminiNextKeyIndex || 0) % geminiKeys.length;
           window._ao3GeminiNextKeyIndex = (startIndex + 1) % geminiKeys.length;
           const geminiCooldowns = ao3GetGeminiCooldownStore();
@@ -3911,6 +3980,7 @@
           // Bound the entire Gemini key-pool attempt for each batch. A list of several
           // slow keys must not multiply the fallback delay without limit.
           const geminiKeyAttemptLimit = Math.min(geminiKeys.length, GEMINI_MAX_KEY_ATTEMPTS_PER_BATCH);
+          let geminiModelOverloaded = null;
           const systemInstructionText =
             '[번역 지침]\n' + customPrompt + characterStyleHint +
             fandomHint +
@@ -3969,6 +4039,14 @@
                     if (!geminiErrorDetail && apiError.code) geminiErrorDetail = String(apiError.code);
                   }
                 } catch (ignoreGeminiErrorBody) {}
+                if (ao3IsGeminiHighDemand(res.status, errorPayload)) {
+                  geminiModelOverloaded = ao3MarkGeminiModelOverloaded(modelName, errorPayload, res.headers);
+                  const overloadUntil = new Date(geminiModelOverloaded.until).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' });
+                  const overloadMessage = 'Google AI가 ' + modelName + '에서 과부하/experiencing high demand를 보고했습니다. 약 ' + Math.ceil((geminiModelOverloaded.until - Date.now()) / 1000) + '초 냉각하고 ' + overloadUntil + ' 이후 다시 시도합니다.';
+                  recordTranslationProviderError('Gemini 모델 과부하', overloadMessage);
+                  setTranslationProviderStatus('Gemini', modelName + ' 과부하 · 대체 모델 전환');
+                  ao3UpdateQuotaEvent(geminiQuotaEventId, { status: 'server-overload-model-fallback' });
+                }
                 if (res.status === 429) {
                   const cooldown = ao3GeminiQuotaCooldown(apiKey, modelName, errorPayload, res.headers);
                   geminiCooldowns[cooldown.key] = cooldown.until;
@@ -4008,8 +4086,13 @@
                   return !isSceneDividerLine(enStrings[idx]) && hasUntranslatedEnglishResidue(preparedStrings[idx], part);
                 });
                 if (badIndex === -1) {
+                  const recoveredModelHealth = ao3GetGeminiModelHealthStore();
+                  if (recoveredModelHealth[modelName] && Number(recoveredModelHealth[modelName].until || 0) <= Date.now()) {
+                    delete recoveredModelHealth[modelName];
+                    ao3SaveGeminiModelHealthStore(recoveredModelHealth);
+                  }
                   cleanParts.translationProvider = 'Gemini';
-                  setTranslationProviderStatus('Gemini', '번역 완료');
+                  setTranslationProviderStatus('Gemini', modelName + ' 번역 완료');
                   return await acceptOrManuallyRetry(cleanParts);
                 }
                 recordTranslationProviderError('Gemini', '문단 ' + (badIndex + 1) + '에 영어 원문 잔여 또는 불완전한 문장이 있어 결과를 채택하지 않았습니다.');
@@ -4035,6 +4118,16 @@
                 break;
               }
             }
+          }
+          if (geminiModelOverloaded) {
+            triedGeminiModels.add(modelName);
+            const alternateModel = ao3NextAvailableGeminiModel(modelName, Array.from(triedGeminiModels));
+            if (alternateModel) {
+              recordTranslationProviderError('Gemini 모델 자동 전환', modelName + ' 과부하 후 현재 문단을 ' + alternateModel + '으로 재시도합니다.');
+              setTranslationProviderStatus('Gemini', modelName + ' 과부하 · ' + alternateModel + ' 재시도');
+              return translateParagraphBatchOnce(enStrings, contextMeta, forcedProvider, alternateModel, Array.from(triedGeminiModels));
+            }
+            setTranslationProviderStatus('Gemini', '대체 Gemini 모델도 냉각 중 · 다음 공급자 확인');
           }
           if (attemptedGeminiKeys === 0) {
             recordTranslationProviderError('Gemini', '이 모델의 등록 키가 명확한 HTTP 429 냉각 시간 안에 있어 이번 문단에서 건너뜁니다.');
