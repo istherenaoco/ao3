@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '92';
+      window.__AO3_BUILD_VERSION__ = '93';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -591,6 +591,7 @@
         bookmarkModalTarget: null, // novel | paragraph | sentence bookmark target
         modalTempTags: [],
         editingNovelId: null,
+        editingChapterTarget: null,
         deleteTarget: null // { type: 'novel', novelId } | { type: 'chapter', novelId, chapterId, chapterIndex }
       };
 
@@ -5644,6 +5645,58 @@
       }
 
       // ==================== EDIT & DELETE NOVEL MODALS ====================
+      function openRenameChapterModal() {
+        const novel = state.novels.find(function(item) { return item.id === state.reader.novelId; });
+        const chapterIndex = Number(state.reader.chapterIndex);
+        const chapter = novel && Array.isArray(novel.chapters) ? novel.chapters[chapterIndex] : null;
+        if (!novel || !chapter) return;
+        state.editingChapterTarget = { novelId: novel.id, chapterId: chapter.id, chapterIndex: chapterIndex };
+        const modal = document.getElementById('renameChapterModal');
+        const input = document.getElementById('renameChapterTitleInput');
+        input.value = chapter.title || ('챕터 ' + (chapterIndex + 1));
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        input.focus({ preventScroll: true });
+        input.select();
+      }
+
+      function closeRenameChapterModal() {
+        const modal = document.getElementById('renameChapterModal');
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        state.editingChapterTarget = null;
+        const trigger = document.getElementById('readerRenameChapterBtn');
+        if (trigger) trigger.focus({ preventScroll: true });
+      }
+
+      function saveRenameChapterModal() {
+        const target = state.editingChapterTarget;
+        const newTitle = document.getElementById('renameChapterTitleInput').value.trim();
+        if (!target) return;
+        if (!newTitle) {
+          showToast('챕터 제목을 입력해 주세요.', 'warning');
+          document.getElementById('renameChapterTitleInput').focus();
+          return;
+        }
+        const novel = state.novels.find(function(item) { return item.id === target.novelId; });
+        const chapter = novel && Array.isArray(novel.chapters)
+          ? ((target.chapterId != null ? novel.chapters.find(function(item) { return item.id === target.chapterId; }) : null) || novel.chapters[target.chapterIndex])
+          : null;
+        if (!novel || !chapter) {
+          closeRenameChapterModal();
+          showToast('챕터를 찾을 수 없습니다. 책장을 새로고침해 주세요.', 'error');
+          return;
+        }
+        chapter.title = newTitle;
+        (Array.isArray(novel.sentenceBookmarks) ? novel.sentenceBookmarks : []).forEach(function(bookmark) {
+          if ((chapter.id != null && bookmark.chapterId === chapter.id) || (chapter.id == null && Number(bookmark.chapterIndex) === target.chapterIndex)) bookmark.chapterTitle = newTitle;
+        });
+        saveToStorage(novel.id);
+        closeRenameChapterModal();
+        if (state.currentView === 'reader' && state.reader.novelId === novel.id) renderReader();
+        showToast('챕터 제목을 수정했습니다.');
+      }
+
       function openEditNovelModal(novelId) {
         const novel = state.novels.find(function(n) { return n.id === novelId; });
         if (!novel) return;
@@ -7110,6 +7163,20 @@
 
         document.getElementById('readerDeleteChapterBtn').addEventListener('click', function() {
           openDeleteChapterModal();
+        });
+        document.getElementById('readerRenameChapterBtn').addEventListener('click', openRenameChapterModal);
+        document.getElementById('closeRenameChapterModalBtn').addEventListener('click', closeRenameChapterModal);
+        document.getElementById('cancelRenameChapterModalBtn').addEventListener('click', closeRenameChapterModal);
+        document.getElementById('saveRenameChapterModalBtn').addEventListener('click', saveRenameChapterModal);
+        document.getElementById('renameChapterTitleInput').addEventListener('keydown', function(event) {
+          if (event.key === 'Enter') { event.preventDefault(); saveRenameChapterModal(); }
+        });
+        const renameChapterModal = document.getElementById('renameChapterModal');
+        renameChapterModal.addEventListener('keydown', function(event) {
+          if (event.key === 'Escape') { event.preventDefault(); closeRenameChapterModal(); }
+        });
+        renameChapterModal.addEventListener('click', function(event) {
+          if (event.target === event.currentTarget) closeRenameChapterModal();
         });
 
         function stepChapter(delta) {
