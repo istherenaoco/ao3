@@ -14,6 +14,6 @@ assert(js.includes('ao3BuildProviderTextBatches(preparedStrings, 4, 8000)'), 'Gr
 assert(js.includes("store.snapshots['groq:' + groqModel]") && js.includes('ao3QuotaCountModel'), 'Groq usage should be shown per model');
 assert(js.includes('DRIVE_PROVIDER_QUOTA_FILE') && js.includes('syncProviderQuotaWithGoogleDrive'), 'quota usage should merge to Drive');
 assert(js.includes('ao3ScheduleProviderQuotaBoundaryRefresh') && js.includes('visibilitychange'), 'quota dashboard should refresh at reset boundaries and tab resume');
-assert(html.includes('id="providerQuotaStorageNote"') && html.includes('app.js?v=93.0'), 'quota storage note and app build version should be updated');
+assert(html.includes('id="providerQuotaStorageNote"') && html.includes('app.js?v=94.0'), 'quota storage note and app build version should be updated');
 assert(shared.includes('X-Groq-RateLimit-Remaining-Requests'), 'Groq limit headers must be exposed through the Worker CORS response');
 console.log('Translation quota optimization regression checks passed.');

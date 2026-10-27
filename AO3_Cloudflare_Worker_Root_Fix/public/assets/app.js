@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '93';
+      window.__AO3_BUILD_VERSION__ = '94';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -2184,7 +2184,7 @@
         filtered.sort(function(a, b) {
           if (sortBy === 'recentRead') return (b.lastReadAt || b.createdAt || 0) - (a.lastReadAt || a.createdAt || 0);
           if (sortBy === 'createdDesc') return (b.createdAt || 0) - (a.createdAt || 0);
-          if (sortBy === 'titleAsc') return (a.title || '').localeCompare(b.title || '', 'ko');
+          if (sortBy === 'chaptersAsc') return (a.chapters ? a.chapters.length : 0) - (b.chapters ? b.chapters.length : 0);
           if (sortBy === 'chaptersDesc') return (b.chapters ? b.chapters.length : 0) - (a.chapters ? a.chapters.length : 0);
           return 0;
         });

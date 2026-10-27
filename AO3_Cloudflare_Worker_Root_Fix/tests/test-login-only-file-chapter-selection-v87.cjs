@@ -21,5 +21,5 @@ assert(js.includes("parseAo3HtmlDocument(text, '', { includeTags: false })") && 
 assert(js.includes('stripAo3ImagePlaceholderText') && js.includes("clone.querySelectorAll('img, picture, source')") && js.includes('!\\[\\s*image'), 'HTML and Markdown AO3 import must omit image-only placeholder text');
 assert(js.includes("parseAo3HtmlDocument(text, '', { includeTags: false })") && js.includes("parsed.reason === 'adult_gate'"), 'adult gate files should be reported instead of silently imported');
 assert(css.includes('html[data-app-theme="green"] body #ao3LinkQueueBox[style]') && css.includes('background-color: #edf5ee !important;'), 'green queue background must override the inline dark background');
-assert(html.includes('app.css?v=86.0') && html.includes('app.js?v=93.0'), 'upload and queue color fixes should use fresh cached assets');
+assert(html.includes('app.css?v=86.0') && html.includes('app.js?v=94.0'), 'upload and queue color fixes should use fresh cached assets');
 console.log('Login-only AO3 file import and green queue contrast checks passed.');
