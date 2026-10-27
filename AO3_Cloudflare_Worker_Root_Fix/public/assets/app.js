@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '89';
+      window.__AO3_BUILD_VERSION__ = '90';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -2406,10 +2406,18 @@
         return output;
       }
 
+      function stripAo3ImagePlaceholderText(value) {
+        return String(value || '')
+          .replace(/!\[\s*image\s*#?\s*\d+\s*\](?:\([^)]*\))?/gi, ' ')
+          .replace(/\[\s*image\s*#?\s*\d+\s*\]\([^)]*\)/gi, ' ')
+          .replace(/!\s*image\s*#?\s*\d+\b/gi, ' ')
+          .replace(/[ \t]{2,}/g, ' ');
+      }
+
       function normalizeAndMergeBrokenParagraphs(rawBlocks) {
         const cleanedBlocks = [];
         rawBlocks.forEach(function(raw) {
-          const s = String(raw || '').replace(/\r/g, '').trim();
+          const s = stripAo3ImagePlaceholderText(raw).replace(/\r/g, '').trim();
           if (!s || s === 'Chapter Text' || s === 'Notes:' || s === 'Summary:') return;
           if (isSceneDividerLine(s)) {
             if (cleanedBlocks[cleanedBlocks.length - 1] !== '* * *') {
@@ -2454,6 +2462,7 @@
           el.remove();
         });
         clone.querySelectorAll('nav, .actions, #feedback, .comments, .comment').forEach(function(el) { el.remove(); });
+        clone.querySelectorAll('img, picture, source').forEach(function(el) { el.remove(); });
 
         clone.querySelectorAll('br').forEach(function(br) {
           br.replaceWith('\n');
@@ -2509,10 +2518,11 @@
         return changed;
       }
 
-      function parseAo3HtmlDocument(htmlText, fallbackSourceUrl) {
+      function parseAo3HtmlDocument(htmlText, fallbackSourceUrl, options) {
         if (!htmlText || typeof htmlText !== 'string') {
           return { meta: {}, chapters: [], reason: 'empty' };
         }
+        const includeTags = !(options && options.includeTags === false);
 
         // Detect Cloudflare challenge and AO3 access interstitials before extracting metadata.
         if (
@@ -2556,7 +2566,7 @@
 
         const workFandomEls = Array.from(doc.querySelectorAll('#workskin .preface dd.fandom.tags a.tag, #preface dd.fandom.tags a.tag, dd.fandom.tags a.tag'));
         const workCategoryEls = Array.from(doc.querySelectorAll('#workskin .preface dd.category.tags a.tag, #preface dd.category.tags a.tag, dd.category.tags a.tag'));
-        const workTagEls = Array.from(doc.querySelectorAll('#workskin .preface dd.relationship.tags a.tag, #workskin .preface dd.character.tags a.tag, #workskin .preface dd.freeform.tags a.tag, #workskin .preface dd.warning.tags a.tag, #preface dd.relationship.tags a.tag, #preface dd.character.tags a.tag, #preface dd.freeform.tags a.tag, #preface dd.warning.tags a.tag, dd.relationship.tags a.tag, dd.character.tags a.tag, dd.freeform.tags a.tag, dd.warning.tags a.tag'));
+        const workTagEls = includeTags ? Array.from(doc.querySelectorAll('#workskin .preface dd.relationship.tags a.tag, #workskin .preface dd.character.tags a.tag, #workskin .preface dd.freeform.tags a.tag, #workskin .preface dd.warning.tags a.tag, #preface dd.relationship.tags a.tag, #preface dd.character.tags a.tag, #preface dd.freeform.tags a.tag, #preface dd.warning.tags a.tag, dd.relationship.tags a.tag, dd.character.tags a.tag, dd.freeform.tags a.tag, dd.warning.tags a.tag')) : [];
 
         const cleanMetaText = function(value) {
           return String(value || '').replace(/\s+/g, ' ').trim();
@@ -2589,7 +2599,9 @@
 
         const fandoms = Array.from(new Set(workFandomEls.map(function(el) { return cleanMetaText(el.textContent); }).filter(Boolean).concat(metadataTagsForLabels(['fandom', 'fandoms']))));
         const categories = Array.from(new Set(workCategoryEls.map(function(el) { return cleanMetaText(el.textContent); }).filter(Boolean).concat(metadataTagsForLabels(['category', 'categories']))));
-        const tags = Array.from(new Set(workTagEls.map(function(el) { return cleanMetaText(el.textContent); }).filter(Boolean).concat(metadataTagsForLabels(['archive warning', 'archive warnings', 'relationship', 'relationships', 'character', 'characters', 'additional tags']))));
+        const tags = includeTags
+          ? Array.from(new Set(workTagEls.map(function(el) { return cleanMetaText(el.textContent); }).filter(Boolean).concat(metadataTagsForLabels(['archive warning', 'archive warnings', 'relationship', 'relationships', 'character', 'characters', 'additional tags']))))
+          : [];
         const extractedMeta = {
           title: rawTitle || 'AO3 추출 작품',
           author: cleanAo3AuthorName(rawAuthor) || 'Anonymous',
@@ -2647,6 +2659,7 @@
                 extractedChapters.push({
                   title: rawChTitle,
                   sourceUrl: fallbackSourceUrl || '',
+                  sourceChapterIndex: idx,
                   paragraphs: paragraphs
                 });
               }
@@ -2658,20 +2671,20 @@
         if (extractedChapters.length === 0) {
           const dlChaptersContainer = doc.querySelector('#chapters');
           if (dlChaptersContainer) {
-            const dlUserstuffs = dlChaptersContainer.querySelectorAll(':scope > div.userstuff, :scope > div.chapter > div.userstuff');
+            const dlUserstuffs = Array.from(dlChaptersContainer.querySelectorAll(':scope > div.userstuff, :scope > div.chapter > div.userstuff'));
             if (dlUserstuffs.length > 0) {
               dlUserstuffs.forEach(function(uNode, idx) {
                 const chapterContainer = uNode.closest('div.chapter');
                 let rawChTitle = chapterContainer ? getChapterTitle(chapterContainer, idx) : '';
                 if (!chapterContainer) {
                   // In AO3's downloaded HTML, a chapter's heading is often the
-                  // preceding .meta.group sibling rather than a child of userstuff.
+                  // nearest preceding .meta.group sibling rather than a child of userstuff.
                   let previous = uNode.previousElementSibling;
-                  while (previous && !rawChTitle) {
+                  while (previous) {
                     if (previous.matches('.meta.group, .meta, h2.toc-heading')) {
                       const heading = previous.querySelector('h2.heading, h3.heading, h2, h3') || previous;
-                      const candidate = cleanChapterTitle(heading.textContent, idx);
-                      if (candidate !== 'Chapter ' + (idx + 1)) rawChTitle = candidate;
+                      rawChTitle = cleanChapterTitle(heading.textContent, idx);
+                      break;
                     }
                     previous = previous.previousElementSibling;
                   }
@@ -2682,6 +2695,7 @@
                   extractedChapters.push({
                     title: rawChTitle,
                     sourceUrl: fallbackSourceUrl || '',
+                    sourceChapterIndex: idx,
                     paragraphs: paragraphs
                   });
                 }
@@ -2709,6 +2723,7 @@
               extractedChapters.push({
                 title: getChapterTitle(singleArticle.closest('div.chapter') || singleArticle.parentElement || singleArticle, 0),
                 sourceUrl: fallbackSourceUrl || '',
+                sourceChapterIndex: 0,
                 paragraphs: paragraphs
               });
             }
@@ -2789,11 +2804,11 @@
             section = section.replace(/^\s*#{2,4}\s*Chapter Text\s*\n?/i, '');
             const paragraphs = [];
             section.split(/\n\s*\n/).forEach(function(b) {
-              const clean = stripInlineTranslationMarkup(b
+              const clean = stripAo3ImagePlaceholderText(stripInlineTranslationMarkup(b
                 .replace(/^#{1,6}\s*Chapter Text\s*$/gim, '')
                 .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
                 .replace(/[ \t]+/g, ' ')
-                .trim());
+                .trim()));
               if (!clean || /^(Skip header|Archive of Our Own|Main Content|Work Header|Chapter Text)$/i.test(clean)) return;
               splitLongParagraphIfNeeded(clean).forEach(function(c) { paragraphs.push(c); });
             });
@@ -2811,7 +2826,7 @@
           if (marker !== -1) story = story.slice(marker).replace(/^#{2,4}\s+Chapter Text\s*\n?/i, '');
           const paragraphs = [];
           story.split(/\n\s*\n/).forEach(function(b) {
-            const clean = stripInlineTranslationMarkup(b.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[ \t]+/g, ' ').trim());
+            const clean = stripAo3ImagePlaceholderText(stripInlineTranslationMarkup(b.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[ \t]+/g, ' ').trim()));
             if (!clean || /^(Skip header|Archive of Our Own|Main Content|Work Header|Chapter Text)$/i.test(clean)) return;
             splitLongParagraphIfNeeded(clean).forEach(function(c) { paragraphs.push(c); });
           });
@@ -4499,8 +4514,13 @@
       }
 
       async function runSingleDraftTranslation(idx) {
+        if (window._ao3AutomaticTranslationJobBusy) {
+          showToast('다른 작품 번역이 진행 중입니다. 현재 작업이 끝난 뒤 다시 시도해 주세요.', 'warning');
+          return;
+        }
+        window._ao3AutomaticTranslationJobBusy = true;
         const ch = state.draftChapters[idx];
-        if (!ch) return;
+        if (!ch) { window._ao3AutomaticTranslationJobBusy = false; return; }
         const progressBox = document.getElementById('translationProgressBox');
         const statusText = document.getElementById('translationStatusText');
         const percentText = document.getElementById('translationPercentText');
@@ -4529,11 +4549,14 @@
           recordTranslationProviderError('번역 중단', err && err.message ? err.message : err);
           reportTranslationFailureToDrive(ch.title, err);
           showToast('API 공급자 순환 ' + Number(err && err.translationRoundsUsed || 1) + '회 후 번역을 중단했습니다. ' + (isDriveTokenValid() ? '실패 리포트를 Google Drive에 자동 업로드합니다.' : '실패 리포트는 보관되며 Google Drive 연결 시 자동 업로드합니다.'), 'warning');
+        } finally {
+          window._ao3AutomaticTranslationJobBusy = false;
         }
       }
 
-      async function runTranslateAllDrafts(onProgress) {
-        if (state.draftChapters.length === 0) {
+      async function runTranslateAllDrafts(onProgress, chapterSnapshot) {
+        const chaptersToTranslate = Array.isArray(chapterSnapshot) ? chapterSnapshot : state.draftChapters;
+        if (chaptersToTranslate.length === 0) {
           showToast('번역할 챕터가 대기열에 없습니다.', 'warning');
           return;
         }
@@ -4545,13 +4568,13 @@
         progressBox.classList.remove('hidden');
         resetTranslationProviderErrors();
         setTranslationProviderStatus('API', '엔진 선택 중');
-        for (let i = 0; i < state.draftChapters.length; i++) {
-          const ch = state.draftChapters[i];
+        for (let i = 0; i < chaptersToTranslate.length; i++) {
+          const ch = chaptersToTranslate[i];
           if (ch.translated) continue;
-          statusText.textContent = '(' + (i + 1) + '/' + state.draftChapters.length + ') "' + ch.title + '" 번역 중...';
+          statusText.textContent = '(' + (i + 1) + '/' + chaptersToTranslate.length + ') "' + ch.title + '" 번역 중...';
           try {
             await translateDraftChapter(ch, function(done, total, batch) {
-              const overallPct = Math.round(((i + (done / Math.max(1, total))) / state.draftChapters.length) * 100);
+              const overallPct = Math.round(((i + (done / Math.max(1, total))) / chaptersToTranslate.length) * 100);
               percentText.textContent = overallPct + '%';
               bar.style.width = overallPct + '%';
               if (typeof onProgress === 'function') onProgress({
@@ -4568,7 +4591,7 @@
               chapter: ch,
               chapterDone: (ch.paragraphs || []).length,
               chapterTotal: (ch.paragraphs || []).length,
-              overallPercent: Math.round(((i + 1) / state.draftChapters.length) * 100),
+              overallPercent: Math.round(((i + 1) / chaptersToTranslate.length) * 100),
               chapterComplete: true
             });
             if (state.currentView === 'studio') renderStudio();
@@ -5897,8 +5920,23 @@
         });
 
         // Stage a work in the bookshelf before translating so its reader can show each completed batch live.
-        async function autoTranslateAndSaveWorkToBookshelf(parsed, sourceUrl) {
+        async function autoTranslateAndSaveWorkToBookshelf(parsed, sourceUrl, importSelection) {
           if (!parsed || !parsed.chapters || parsed.chapters.length === 0) return null;
+          if (window._ao3AutomaticTranslationJobBusy) {
+            throw new Error('다른 작품 번역이 진행 중입니다. 현재 작업이 끝난 뒤 업로드해 주세요.');
+          }
+          window._ao3AutomaticTranslationJobBusy = true;
+          try {
+          if (importSelection) {
+            const selectedIndexes = Array.isArray(importSelection.selectedChapterIndexes) ? importSelection.selectedChapterIndexes : [];
+            const totalFileChapters = Number(importSelection.totalFileChapters || 0);
+            const uniqueIndexes = new Set(selectedIndexes);
+            if (!selectedIndexes.length || selectedIndexes.length !== parsed.chapters.length || uniqueIndexes.size !== selectedIndexes.length ||
+                selectedIndexes.some(function(index) { return !Number.isInteger(index) || index < 0 || index >= totalFileChapters; }) ||
+                parsed.chapters.some(function(chapter, index) { return Number(chapter.sourceChapterIndex) !== selectedIndexes[index]; })) {
+              throw new Error('선택한 챕터 정보가 업로드 파일과 일치하지 않습니다. 파일을 다시 선택해 주세요.');
+            }
+          }
 
           // AO3 Summary discovery/translation is disabled. Keep imported works'
           // user memo blank; title, author, fandom, and chapter import continue normally.
@@ -5907,10 +5945,14 @@
 
           state.draftChapters = [];
           appendParsedWorkToDrafts(parsed, sourceUrl);
+          const draftChapters = state.draftChapters.slice();
+          if (importSelection && draftChapters.length !== importSelection.selectedChapterIndexes.length) {
+            throw new Error('선택한 챕터 수와 번역 대기열이 일치하지 않아 중단했습니다.');
+          }
           renderStudio();
           const rawMetaTitle = (parsed.meta && parsed.meta.title ? parsed.meta.title.trim() : '') ||
             document.getElementById('novelTitleInput').value.trim() ||
-            (state.draftChapters[0] ? state.draftChapters[0].title : 'AO3 번역 소설');
+            (draftChapters[0] ? draftChapters[0].title : 'AO3 번역 소설');
           const rawAuthor = (parsed.meta && parsed.meta.author ? parsed.meta.author.trim() : '') ||
             document.getElementById('novelAuthorInput').value.trim() ||
             'Anonymous';
@@ -5920,7 +5962,7 @@
           const isBookmarked = document.getElementById('studioBookmarkCheck').checked;
           const rawTags = document.getElementById('studioBookmarkTagsInput').value
             .split(',').map(function(t) { return t.replace(/^#+/, '').trim(); }).filter(Boolean);
-          const workIdMatch = (sourceUrl || (state.draftChapters[0] && state.draftChapters[0].sourceUrl) || '').match(/\/works\/(\d+)/);
+          const workIdMatch = (sourceUrl || (draftChapters[0] && draftChapters[0].sourceUrl) || '').match(/\/works\/(\d+)/);
           const workId = workIdMatch ? workIdMatch[1] : null;
 
           let targetNovel = null;
@@ -5934,7 +5976,7 @@
 
           const isNewNovel = !targetNovel;
           const chapterOffset = targetNovel ? (targetNovel.chapters || []).length : 0;
-          const chaptersCopy = state.draftChapters.map(function(ch) {
+          const chaptersCopy = draftChapters.map(function(ch) {
             return {
               id: 'ch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
               title: ch.title,
@@ -5982,8 +6024,8 @@
           targetNovel.chapters = (targetNovel.chapters || []).concat(chaptersCopy);
           targetNovel.translationProgress = {
             status: 'translating', percentage: 0, completedChapters: 0,
-            totalChapters: state.draftChapters.length, currentChapterIndex: chapterOffset,
-            chapterDone: 0, chapterTotal: (state.draftChapters[0].paragraphs || []).length
+            totalChapters: draftChapters.length, currentChapterIndex: chapterOffset,
+            chapterDone: 0, chapterTotal: (draftChapters[0].paragraphs || []).length
           };
           saveToStorage(targetNovel.id);
           openNovelInReader(targetNovel.id, chapterOffset);
@@ -6000,13 +6042,13 @@
                 tags: Array.isArray(p.tags) ? p.tags.slice() : [], note: p.note || ''
               };
             });
-            const doneBefore = state.draftChapters.slice(0, update.chapterIndex).reduce(function(sum, chapter) {
+            const doneBefore = draftChapters.slice(0, update.chapterIndex).reduce(function(sum, chapter) {
               return sum + (chapter.translated ? (chapter.paragraphs || []).length : 0);
             }, 0);
-            const totalParagraphs = Math.max(1, state.draftChapters.reduce(function(sum, chapter) {
+            const totalParagraphs = Math.max(1, draftChapters.reduce(function(sum, chapter) {
               return sum + (chapter.paragraphs || []).length;
             }, 0));
-            const completedChapters = state.draftChapters.filter(function(chapter) { return chapter.translated; }).length;
+            const completedChapters = draftChapters.filter(function(chapter) { return chapter.translated; }).length;
             targetNovel.translationProgress.currentChapterIndex = targetIndex;
             targetNovel.translationProgress.completedChapters = completedChapters;
             targetNovel.translationProgress.chapterDone = update.chapterDone || 0;
@@ -6019,8 +6061,8 @@
           };
 
           try {
-            const allDraftsTranslated = await runTranslateAllDrafts(updateLiveShelfReader);
-            if (!allDraftsTranslated || state.draftChapters.some(function(ch) { return !ch.translated; })) {
+            const allDraftsTranslated = await runTranslateAllDrafts(updateLiveShelfReader, draftChapters);
+            if (!allDraftsTranslated || draftChapters.some(function(ch) { return !ch.translated; })) {
               throw new Error('번역이 완료되지 않아 작업을 중단했습니다. API 오류를 확인한 뒤 다시 시도해 주세요.');
             }
 
@@ -6034,7 +6076,7 @@
             }
             if (isNewNovel) targetNovel.title = finalTitle;
             targetNovel.translationProgress.percentage = 100;
-            targetNovel.translationProgress.completedChapters = state.draftChapters.length;
+            targetNovel.translationProgress.completedChapters = draftChapters.length;
             targetNovel.translationProgress.status = 'completed';
             delete targetNovel.translationProgress;
             targetNovel.updatedAt = Date.now();
@@ -6065,6 +6107,9 @@
             if (state.currentView === 'reader' && state.reader.novelId === targetNovel.id) switchView('bookshelf');
             else if (state.currentView === 'bookshelf') renderBookshelf();
             throw translationError;
+          }
+          } finally {
+            window._ao3AutomaticTranslationJobBusy = false;
           }
         }
 
@@ -6113,6 +6158,7 @@
               id: 'draft_' + Date.now() + '_' + cIdx + '_' + Math.random().toString(36).slice(2, 7),
               title: ch.title || ('Chapter ' + (state.draftChapters.length + 1)),
               sourceUrl: ch.sourceUrl || sourceUrl || '',
+              sourceChapterIndex: Number.isInteger(ch.sourceChapterIndex) ? ch.sourceChapterIndex : cIdx,
               translated: false,
               paragraphs: (ch.paragraphs || []).map(function(pText, pIdx) {
                 return {
@@ -6200,58 +6246,85 @@
           if (!preview || !metaBox || !chapterList || !chapterCount) return;
           pendingAo3FileImport = parsed;
           const meta = parsed.meta || {};
-          const tags = (meta.categories || []).concat(meta.tags || []).filter(Boolean);
           metaBox.innerHTML = '<h3 class="text-sm font-bold text-slate-900">' + escapeHtml(meta.title || '제목 미확인') + '</h3>' +
             '<p class="text-xs text-slate-700">작가: ' + escapeHtml(meta.author || '작가 미확인') + '</p>' +
-            '<p class="text-xs text-slate-700">원작 / 장르: ' + escapeHtml(meta.genre || meta.fandom || '분류 미확인') + '</p>' +
-            (tags.length ? '<p class="text-[11px] leading-relaxed text-slate-500">태그: ' + escapeHtml(tags.slice(0, 30).join(' · ')) + '</p>' : '');
-          chapterCount.textContent = '챕터 선택 (' + parsed.chapters.length + '개)';
+            '<p class="text-xs text-slate-700">원작 / 장르: ' + escapeHtml(meta.genre || meta.fandom || '분류 미확인') + '</p>';
+          const updateSelectedChapterCount = function() {
+            const selectedCount = chapterList.querySelectorAll('[data-file-import-chapter]:checked').length;
+            chapterCount.textContent = '챕터 선택 · ' + selectedCount + '/' + parsed.chapters.length + '개 선택됨';
+          };
           chapterList.innerHTML = parsed.chapters.map(function(chapter, index) {
             const paragraphCount = Array.isArray(chapter.paragraphs) ? chapter.paragraphs.length : 0;
             return '<label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-slate-800 hover:bg-rose-50">' +
-              '<input type="checkbox" data-file-import-chapter="' + index + '" checked class="rounded border-slate-300 text-rose-700 focus:ring-rose-600">' +
+              '<input type="checkbox" data-file-import-chapter="' + index + '" class="rounded border-slate-300 text-rose-700 focus:ring-rose-600">' +
               '<span class="min-w-0 flex-1 truncate">' + (index + 1) + '. ' + escapeHtml(chapter.title || ('Chapter ' + (index + 1))) + '</span>' +
               '<span class="shrink-0 text-[10px] text-slate-500">' + paragraphCount + '문단</span></label>';
           }).join('');
+          chapterList.querySelectorAll('[data-file-import-chapter]').forEach(function(input) {
+            input.addEventListener('change', updateSelectedChapterCount);
+          });
+          updateSelectedChapterCount();
           preview.classList.remove('hidden');
           preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
         const chapterSelectAll = document.getElementById('ao3FileSelectAllBtn');
         if (chapterSelectAll) chapterSelectAll.addEventListener('click', function() {
-          document.querySelectorAll('[data-file-import-chapter]').forEach(function(input) { input.checked = true; });
+          const chapterList = document.getElementById('ao3FileImportChapterList');
+          chapterList.querySelectorAll('[data-file-import-chapter]').forEach(function(input) { input.checked = true; input.dispatchEvent(new Event('change')); });
         });
         const chapterSelectNone = document.getElementById('ao3FileSelectNoneBtn');
         if (chapterSelectNone) chapterSelectNone.addEventListener('click', function() {
-          document.querySelectorAll('[data-file-import-chapter]').forEach(function(input) { input.checked = false; });
+          const chapterList = document.getElementById('ao3FileImportChapterList');
+          chapterList.querySelectorAll('[data-file-import-chapter]').forEach(function(input) { input.checked = false; input.dispatchEvent(new Event('change')); });
         });
         document.getElementById('ao3TranslateSelectedFileChaptersBtn').addEventListener('click', async function(event) {
           if (!pendingAo3FileImport) return;
-          const selectedIndexes = Array.from(document.querySelectorAll('[data-file-import-chapter]:checked')).map(function(input) {
+          if (window._ao3AutomaticTranslationJobBusy) {
+            showToast('다른 작품 번역이 진행 중입니다. 현재 작업이 끝난 뒤 다시 선택해 주세요.', 'warning');
+            return;
+          }
+          const fileImportSnapshot = pendingAo3FileImport;
+          const chapterList = document.getElementById('ao3FileImportChapterList');
+          const selectedIndexes = Array.from(chapterList.querySelectorAll('[data-file-import-chapter]:checked')).map(function(input) {
             return Number(input.getAttribute('data-file-import-chapter'));
-          }).filter(function(index) { return Number.isInteger(index) && index >= 0 && index < pendingAo3FileImport.chapters.length; });
+          }).filter(function(index) { return Number.isInteger(index) && index >= 0 && index < fileImportSnapshot.chapters.length; }).sort(function(a, b) { return a - b; });
           if (!selectedIndexes.length) { showToast('번역할 챕터를 하나 이상 선택해 주세요.', 'warning'); return; }
           const button = event.currentTarget;
           button.disabled = true;
           const originalText = button.textContent;
           button.textContent = '선택한 ' + selectedIndexes.length + '개 챕터 번역 중…';
+          const fileInput = document.getElementById('ao3HtmlFileInput');
+          const uploadButton = document.getElementById('ao3HtmlFileBtn');
+          const selectAllButton = document.getElementById('ao3FileSelectAllBtn');
+          const selectNoneButton = document.getElementById('ao3FileSelectNoneBtn');
+          const chapterCheckboxes = Array.from(chapterList.querySelectorAll('[data-file-import-chapter]'));
+          const controls = [fileInput, uploadButton, selectAllButton, selectNoneButton].concat(chapterCheckboxes).filter(Boolean);
+          const previousDisabledStates = controls.map(function(control) { return control.disabled; });
+          controls.forEach(function(control) { control.disabled = true; });
           const parsed = {
-            meta: Object.assign({}, pendingAo3FileImport.meta || {}),
-            chapters: selectedIndexes.map(function(index) { return pendingAo3FileImport.chapters[index]; })
+            meta: Object.assign({}, fileImportSnapshot.meta || {}),
+            chapters: selectedIndexes.map(function(index) {
+              return Object.assign({}, fileImportSnapshot.chapters[index], { sourceChapterIndex: index });
+            })
           };
           document.getElementById('novelTitleInput').value = parsed.meta.title || '';
           document.getElementById('novelAuthorInput').value = parsed.meta.author || '';
           document.getElementById('novelFandomInput').value = parsed.meta.genre || parsed.meta.fandom || '';
           try {
-            const savedNovel = await autoTranslateAndSaveWorkToBookshelf(parsed, '');
+            const savedNovel = await autoTranslateAndSaveWorkToBookshelf(parsed, '', {
+              selectedChapterIndexes: selectedIndexes.slice(),
+              totalFileChapters: fileImportSnapshot.chapters.length
+            });
             if (savedNovel) {
-              pendingAo3FileImport = null;
+              if (pendingAo3FileImport === fileImportSnapshot) pendingAo3FileImport = null;
               document.getElementById('ao3FileImportPreview').classList.add('hidden');
               showToast('선택한 ' + selectedIndexes.length + '개 챕터를 번역해 책장에 저장했습니다.');
             }
           } catch (error) {
             showToast('선택 챕터를 저장하지 못했습니다: ' + String(error && error.message || error), 'error');
           } finally {
+            controls.forEach(function(control, index) { control.disabled = previousDisabledStates[index]; });
             button.disabled = false;
             button.textContent = originalText;
           }
@@ -6260,6 +6333,9 @@
         document.getElementById('ao3HtmlFileInput').addEventListener('change', async function(e) {
           const file = e.target.files && e.target.files[0];
           if (!file) return;
+          pendingAo3FileImport = null;
+          document.getElementById('ao3FileImportPreview').classList.add('hidden');
+          document.getElementById('ao3FileImportChapterList').innerHTML = '';
           const extension = String(file.name || '').split('.').pop().toLowerCase();
           if (file.size > 25 * 1024 * 1024) {
             showToast('파일은 25MB 이하로 선택해 주세요.', 'warning'); e.target.value = ''; return;
@@ -6278,7 +6354,7 @@
                 chapters: [{ title: file.name.replace(/\.[^.]+$/, ''), paragraphs: normalizeAndMergeBrokenParagraphs(paragraphs), sourceUrl: '' }]
               };
             } else {
-              parsed = parseAo3HtmlDocument(text, '');
+              parsed = parseAo3HtmlDocument(text, '', { includeTags: false });
               if (parsed && parsed.reason === 'adult_gate') {
                 throw new Error('파일에 성인 인증 화면만 있습니다. 로그인 상태에서 AO3의 Download → HTML을 다시 저장해 주세요.');
               }
@@ -6915,7 +6991,14 @@
           // Automatically translate any untranslated chapters before binding
           const hasUntranslated = state.draftChapters.some(function(ch) { return !ch.translated; });
           if (hasUntranslated) {
-            await runTranslateAllDrafts();
+            window._ao3AutomaticTranslationJobBusy = true;
+            let translationSucceeded = false;
+            try {
+              translationSucceeded = await runTranslateAllDrafts();
+            } finally {
+              window._ao3AutomaticTranslationJobBusy = false;
+            }
+            if (!translationSucceeded || state.draftChapters.some(function(ch) { return !ch.translated; })) return;
           }
 
           const chaptersCopy = state.draftChapters.map(function(ch) {

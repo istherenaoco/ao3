@@ -12,7 +12,14 @@ assert(html.includes('accept=".html,.htm,.xhtml,.txt'), 'file chooser should acc
 assert(js.includes("querySelectorAll('#workskin .preface dd.fandom.tags a.tag") && js.includes('workCategoryEls') && js.includes('workTagEls'), 'AO3 fandom/category/tag metadata should be extracted');
 assert(js.includes("metadataTagsForLabels(['fandom', 'fandoms'])") && js.includes("metadataTagsForLabels(['category', 'categories'])"), 'plain AO3 download metadata labels should also be recognized');
 assert(js.includes('renderAo3FileImportPreview(parsed)') && js.includes('selectedIndexes.map(function(index)'), 'file import should stage the selected chapters before translation');
-assert(js.includes('parseAo3HtmlDocument(text, \'\')') && js.includes("parsed.reason === 'adult_gate'"), 'adult gate files should be reported instead of silently imported');
+assert(js.includes('.sort(function(a, b) { return a - b; });'), 'selected upload chapters must retain source order');
+assert(js.includes("const chaptersToTranslate = Array.isArray(chapterSnapshot) ? chapterSnapshot : state.draftChapters") && js.includes('runTranslateAllDrafts(updateLiveShelfReader, draftChapters)'), 'automatic imports must translate their immutable selected-chapter snapshot, not a later shared queue');
+assert(js.includes('totalFileChapters: fileImportSnapshot.chapters.length') && js.includes('selectedChapterIndexes: selectedIndexes.slice()'), 'file selection must be validated against the source chapter manifest');
+assert(js.includes("chapterCount.textContent = '챕터 선택 · ' + selectedCount + '/' + parsed.chapters.length + '개 선택됨'") && !/data-file-import-chapter=.*index.*checked/.test(js), 'chapter preview must show the selected count and begin with no chapters checked');
+assert(js.includes("rawChTitle = cleanChapterTitle(heading.textContent, idx);\n                      break;"), 'static AO3 download headings must bind to their nearest chapter body');
+assert(js.includes("parseAo3HtmlDocument(text, '', { includeTags: false })") && !js.includes("'<p class=\"text-[11px] leading-relaxed text-slate-500\">태그:"), 'HTML uploads should not parse or display work tags');
+assert(js.includes('stripAo3ImagePlaceholderText') && js.includes("clone.querySelectorAll('img, picture, source')") && js.includes('!\\[\\s*image'), 'HTML and Markdown AO3 import must omit image-only placeholder text');
+assert(js.includes("parseAo3HtmlDocument(text, '', { includeTags: false })") && js.includes("parsed.reason === 'adult_gate'"), 'adult gate files should be reported instead of silently imported');
 assert(css.includes('html[data-app-theme="green"] body #ao3LinkQueueBox[style]') && css.includes('background-color: #edf5ee !important;'), 'green queue background must override the inline dark background');
-assert(html.includes('app.css?v=85.0') && html.includes('app.js?v=89.0'), 'upload and queue color fixes should use fresh cached assets');
+assert(html.includes('app.css?v=85.0') && html.includes('app.js?v=90.0'), 'upload and queue color fixes should use fresh cached assets');
 console.log('Login-only AO3 file import and green queue contrast checks passed.');
