@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col selection:bg-rose-100 selection:text-rose-900">
-  <!-- AO3_BUILD=ao3-bookshelf-ui-v94.0 -->
+  <!-- AO3_BUILD=ao3-bookshelf-ui-v95.0 -->
 <!-- Top Navigation Header -->
   <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
@@ -289,6 +289,14 @@
               </div>
               <div class="w-full h-2 bg-rose-200/70 rounded-full overflow-hidden">
                 <div id="translationProgressBar" class="h-full bg-rose-700 transition-all duration-300" style="width: 0%"></div>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-[11px]">
+                <label for="translationManualProvider" class="font-semibold text-rose-900">직접 API 선택</label>
+                <select id="translationManualProvider" class="rounded-lg border border-rose-200 bg-white px-2 py-1 text-rose-950">
+                  <option value="gemini">Gemini</option><option value="workers-ai">Workers AI</option><option value="groq">Groq</option><option value="azure">Azure Translator</option>
+                </select>
+                <button id="translationManualProviderBtn" type="button" class="rounded-lg border border-rose-300 bg-white px-2.5 py-1 font-bold text-rose-800 hover:bg-rose-100 disabled:opacity-50" disabled>현재 문단을 이 API로 재시도</button>
+                <span id="translationManualProviderHint" class="text-rose-800/80">번역 중 선택한 API로 현재 문단부터 다시 시도합니다.</span>
               </div>
               <div id="translationProviderErrors" class="hidden rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-950 whitespace-pre-wrap break-words" role="status" aria-live="polite"></div>
             </div>
@@ -671,6 +679,14 @@
         </div>
         <div class="mt-3 h-2 overflow-hidden rounded-full bg-emerald-100" role="progressbar" aria-label="작품 번역 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="readerTranslationProgressTrack">
           <div id="readerTranslationProgressBar" class="h-full w-0 rounded-full bg-emerald-600 transition-[width] duration-300"></div>
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          <label for="readerManualProvider" class="font-semibold text-emerald-950">직접 API 선택</label>
+          <select id="readerManualProvider" class="rounded-lg border border-emerald-300 bg-white px-2 py-1 text-emerald-950">
+            <option value="gemini">Gemini</option><option value="workers-ai">Workers AI</option><option value="groq">Groq</option><option value="azure">Azure Translator</option>
+          </select>
+          <button id="readerManualProviderBtn" type="button" class="rounded-lg border border-emerald-400 bg-white px-2.5 py-1 font-bold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50" disabled>현재 문단을 이 API로 재시도</button>
+          <span id="readerManualProviderHint" class="text-emerald-800">번역 중 선택한 API로 현재 문단부터 다시 시도합니다.</span>
         </div>
         <div class="mt-4 border-t border-emerald-200 pt-3">
           <p class="mb-2 text-[11px] font-bold text-emerald-900">최근 번역 결과</p>

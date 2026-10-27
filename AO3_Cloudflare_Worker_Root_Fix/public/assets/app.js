@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '94';
+      window.__AO3_BUILD_VERSION__ = '95';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -3454,6 +3454,8 @@
           const reservationId = await ao3ReserveAzureCharacterBudget(chars);
           let response;
           const controller = sharedController || new AbortController();
+          const manualControllers = window._ao3ManualProviderControllers || (window._ao3ManualProviderControllers = new Set());
+          manualControllers.add(controller);
           const timeoutId = setTimeout(function() { controller.abort(); }, 20000);
           try {
             response = await fetch(ao3FunctionUrl('azure-translate'), {
@@ -3468,6 +3470,7 @@
             throw networkError;
           } finally {
             clearTimeout(timeoutId);
+            manualControllers.delete(controller);
           }
           ao3RecordQuotaUsage('azure', response.ok ? chars : 0, { model: 'Translator', status: 'HTTP ' + response.status });
           if (!response.ok) ao3CaptureQuotaResponse('azure', response.status, null, response.headers, 'Translator');
@@ -3494,6 +3497,8 @@
         const cooldowns = window._ao3ProviderCooldownUntil || (window._ao3ProviderCooldownUntil = Object.create(null));
         if (Number(cooldowns[provider] || 0) > Date.now()) return null;
         const requestController = (provider === 'groq' || provider === 'workers-ai') ? new AbortController() : null;
+        const manualControllers = window._ao3ManualProviderControllers || (window._ao3ManualProviderControllers = new Set());
+        if (requestController) manualControllers.add(requestController);
         const parentSignal = provider === 'groq' && context && context.signalController ? context.signalController.signal : null;
         let parentAbortHandler = null;
         if (requestController && parentSignal) {
@@ -3539,6 +3544,7 @@
         } finally {
           if (requestTimeoutId) clearTimeout(requestTimeoutId);
           if (parentSignal && parentAbortHandler) parentSignal.removeEventListener('abort', parentAbortHandler);
+          if (requestController) manualControllers.delete(requestController);
         }
         if (provider === 'groq') ao3CaptureGroqQuotaHeaders(response.headers, model);
         const retryAfterHeader = response.headers.get('Retry-After');
@@ -3755,11 +3761,17 @@
         const maxRounds = 2;
         let roundsUsed = 0;
         let lastError = null;
+        window._ao3TranslationBatchActiveCount = Number(window._ao3TranslationBatchActiveCount || 0) + 1;
+        const manualButton = document.getElementById('translationManualProviderBtn');
+        if (manualButton) manualButton.disabled = false;
         for (let round = 1; round <= maxRounds; round++) {
           roundsUsed = round;
           setTranslationProviderStatus('API', '공급자 순환 ' + round + '/' + maxRounds);
           try {
-            return await translateParagraphBatchOnce(enStrings, contextMeta);
+            const result = await translateParagraphBatchOnce(enStrings, contextMeta);
+            window._ao3TranslationBatchActiveCount = Math.max(0, Number(window._ao3TranslationBatchActiveCount || 1) - 1);
+            if (manualButton && !window._ao3TranslationBatchActiveCount) manualButton.disabled = true;
+            return result;
           } catch (error) {
             lastError = error;
             if (round >= maxRounds || !shouldRetryTranslationRound(error)) break;
@@ -3773,6 +3785,8 @@
         const exhausted = new Error(message);
         exhausted.translationRoundsExhausted = true;
         exhausted.translationRoundsUsed = roundsUsed;
+        window._ao3TranslationBatchActiveCount = Math.max(0, Number(window._ao3TranslationBatchActiveCount || 1) - 1);
+        if (manualButton && !window._ao3TranslationBatchActiveCount) manualButton.disabled = true;
         throw exhausted;
       }
 
@@ -3789,7 +3803,7 @@
         return batches;
       }
 
-      async function translateParagraphBatchOnce(enStrings, contextMeta) {
+      async function translateParagraphBatchOnce(enStrings, contextMeta, manualProviderOverride) {
         // Text replacement rules apply only after translation, never to the source text.
         const preparedStrings = enStrings.map(function(s) {
           if (isSceneDividerLine(s)) return '* * *';
@@ -3801,11 +3815,30 @@
         const fandomHint = (contextMeta && contextMeta.fandom) ? ('\n[원작/장르 정보]: ' + contextMeta.fandom) : '';
         const prevContextHint = (contextMeta && contextMeta.prevContext) ? ('\n[직전 문단 맥락(참고용, 번역 출력 제외)]: ' + contextMeta.prevContext) : '';
         const characterStyleHint = String(state.settings.characterStyleRules || '').trim() ? '\n[추가 프롬프트]\n' + String(state.settings.characterStyleRules).trim() + '\n기본 번역 지침과 충돌하면 원문의 의미와 문맥을 우선하고, 추가 지침은 해당 문맥에 맞게 적용하세요.' : '';
+        const forcedProvider = manualProviderOverride || '';
+        async function acceptOrManuallyRetry(translations) {
+          const nextProvider = window._ao3ManualProviderRequested || '';
+          if (nextProvider) {
+            window._ao3ManualProviderRequested = '';
+            window._ao3ManualSwitchAbortRequested = false;
+            setTranslationProviderStatus(nextProvider === 'gemini' ? 'Gemini' : nextProvider === 'workers-ai' ? 'Cloudflare Workers AI' : nextProvider === 'groq' ? 'Groq' : 'Azure Translator', '사용자가 선택한 API로 현재 문단 재시도');
+            return translateParagraphBatchOnce(enStrings, contextMeta, nextProvider);
+          }
+          return translations;
+        }
+        async function retryManualProviderAfterAbort() {
+          const nextProvider = window._ao3ManualProviderRequested || '';
+          if (!nextProvider || !window._ao3ManualSwitchAbortRequested) return null;
+          window._ao3ManualProviderRequested = '';
+          window._ao3ManualSwitchAbortRequested = false;
+          setTranslationProviderStatus(nextProvider === 'gemini' ? 'Gemini' : nextProvider === 'workers-ai' ? 'Cloudflare Workers AI' : nextProvider === 'groq' ? 'Groq' : 'Azure Translator', '현재 문단 전환 중');
+          return translateParagraphBatchOnce(enStrings, contextMeta, nextProvider);
+        }
 
         // 1. Gemini key pool: round-robin across requests, try every configured key on failure.
         const geminiKeys = Array.from(new Set(String(state.settings.geminiApiKeys || state.settings.geminiApiKey || '')
           .split(/[\r\n,;]+/).map(function(k) { return k.trim(); }).filter(Boolean)));
-        if (geminiKeys.length) {
+        if ((!forcedProvider || forcedProvider === 'gemini') && geminiKeys.length) {
           const modelName = (state.settings.geminiModel || DEFAULT_GEMINI_MODEL).trim();
           const startIndex = (window._ao3GeminiNextKeyIndex || 0) % geminiKeys.length;
           window._ao3GeminiNextKeyIndex = (startIndex + 1) % geminiKeys.length;
@@ -3832,6 +3865,8 @@
             try {
               setTranslationProviderStatus('Gemini', '요청 중 · 키 ' + (keyIndex + 1));
               const geminiController = new AbortController();
+              const manualControllers = window._ao3ManualProviderControllers || (window._ao3ManualProviderControllers = new Set());
+              manualControllers.add(geminiController);
               const geminiTimeoutId = setTimeout(function() {
                 geminiTimedOut = true;
                 geminiController.abort('Gemini request exceeded ' + GEMINI_REQUEST_TIMEOUT_MS + 'ms');
@@ -3851,6 +3886,7 @@
                 });
               } finally {
                 clearTimeout(geminiTimeoutId);
+                manualControllers.delete(geminiController);
               }
               if (!res.ok) {
                 let geminiErrorDetail = '';
@@ -3897,7 +3933,7 @@
                 if (badIndex === -1) {
                   cleanParts.translationProvider = 'Gemini';
                   setTranslationProviderStatus('Gemini', '번역 완료');
-                  return cleanParts;
+                  return await acceptOrManuallyRetry(cleanParts);
                 }
                 recordTranslationProviderError('Gemini', '문단 ' + (badIndex + 1) + '에 영어 원문 잔여 또는 불완전한 문장이 있어 결과를 채택하지 않았습니다.');
                 console.warn('Gemini output for paragraph ' + (badIndex + 1) + ' contained leftover English/formatting or an incomplete sentence; trying Workers AI/Groq/Azure fallback for the batch.');
@@ -3907,6 +3943,8 @@
               console.warn('Gemini response format mismatch; moving to the next provider.');
               break;
             } catch (err) {
+              const manuallyRetried = await retryManualProviderAfterAbort();
+              if (manuallyRetried) return manuallyRetried;
               recordTranslationProviderError('Gemini 키 ' + (keyIndex + 1), err && err.message ? err.message : err);
               const message = geminiTimedOut
                 ? 'Gemini request timed out after ' + Math.round(GEMINI_REQUEST_TIMEOUT_MS / 1000) + ' seconds; usage is unknown, so this batch will fall through without another Gemini request.'
@@ -3915,6 +3953,7 @@
               recordTranslationProviderError('Gemini key ' + (keyIndex + 1), message);
               console.warn('Gemini request failed; ' + (geminiTimedOut || (err && err.name === 'AbortError') ? 'skipping further Gemini attempts for this batch.' : 'trying one alternate key or the next provider.'), message);
               if (geminiTimedOut || (err && err.name === 'AbortError')) {
+                if (window._ao3ManualSwitchAbortRequested) break;
                 geminiCooldowns[apiKey] = Date.now() + 2 * 60 * 1000;
                 break;
               }
@@ -3983,8 +4022,10 @@
             if (badIndex !== -1) throw new Error('문단 ' + (badIndex + 1) + '에 영어 잔존 또는 불완전한 번역이 감지되었습니다.');
             clean.translationProvider = 'Cloudflare Workers AI';
             setTranslationProviderStatus('Cloudflare Workers AI', '번역 완료 · 결과 검사 통과');
-            return clean;
+            return await acceptOrManuallyRetry(clean);
           } catch (error) {
+            const manuallyRetried = await retryManualProviderAfterAbort();
+            if (manuallyRetried) return manuallyRetried;
             recordTranslationProviderError('Cloudflare Workers AI', error && error.message ? error.message : error);
             setTranslationProviderStatus('Cloudflare Workers AI', '실패 · Groq로 전환');
             console.warn('Workers AI translation failed; falling back to Groq/Azure.', error && error.message ? error.message : error);
@@ -3992,7 +4033,7 @@
           }
         }
 
-        const workersAiTranslations = await attemptWorkersAIProvider();
+        const workersAiTranslations = (!forcedProvider || forcedProvider === 'workers-ai') ? await attemptWorkersAIProvider() : null;
         if (workersAiTranslations) return workersAiTranslations;
 
         const groqRaceController = new AbortController();
@@ -4067,10 +4108,12 @@
                 }
                 cleanGroqTranslations.translationProvider = 'Groq';
                 setTranslationProviderStatus('Groq', '번역 완료');
-                return cleanGroqTranslations;
+                return await acceptOrManuallyRetry(cleanGroqTranslations);
               }
               throw new Error('Groq translation returned an incomplete paragraph batch.');
             } catch (groqError) {
+              const manuallyRetried = await retryManualProviderAfterAbort();
+              if (manuallyRetried) return manuallyRetried;
               if (groqCancelledByHedgeWinner && groqRaceController.signal.aborted) {
                 // Azure already returned a valid result; this abort is intentional, not a provider error.
                 return null;
@@ -4191,7 +4234,7 @@
               if (badAzureIndex === -1) {
                 azureCleaned.translationProvider = 'Azure Translator';
                 setTranslationProviderStatus('Azure Translator', '번역 완료 · 결과 검사 통과');
-                return azureCleaned;
+                return await acceptOrManuallyRetry(azureCleaned);
               }
               // Do not save a questionable Azure result as successful. Continue to
               // the existing free Google fallback below, preserving provider order.
@@ -4217,6 +4260,8 @@
                '; continuing to Groq fallback.')
             );
           } catch (azureError) {
+              const manuallyRetried = await retryManualProviderAfterAbort();
+              if (manuallyRetried) return manuallyRetried;
             recordTranslationProviderError('Azure Translator', azureError && azureError.message ? azureError.message : azureError);
             setTranslationProviderStatus('Azure Translator', '백업 요청 오류');
             console.warn('Azure Translator backup request failed.', azureError && azureError.message ? azureError.message : azureError);
@@ -4234,13 +4279,17 @@
         // Keep priority: Gemini first; then Groq. If Groq has not returned a validated
         // result within 3.5s, start Azure in parallel. If Groq fails earlier, start Azure
         // immediately. The first VALID result wins; failed/invalid outputs never race as winners.
-        const groqOutcome = attemptGroqProvider().then(
+        if (forcedProvider && forcedProvider !== 'groq' && forcedProvider !== 'azure') {
+          throw new Error('선택한 API를 사용할 수 없거나 등록되어 있지 않습니다.');
+        }
+        const groqOutcome = (forcedProvider === 'azure' ? Promise.resolve(null) : attemptGroqProvider()).then(
           function(result) { return { provider: 'Groq', result: result || null }; },
           function(error) { recordTranslationProviderError('Groq', error && error.message || error); return { provider: 'Groq', result: null }; }
         );
         let azureOutcome = null;
         let azureStarted = false;
         function startAzureBackup() {
+          if (forcedProvider === 'groq') return Promise.resolve({ provider: 'Azure Translator', result: null });
           if (!azureStarted) {
             azureStarted = true;
             azureOutcome = attemptAzureProvider().then(
@@ -4250,10 +4299,9 @@
           }
           return azureOutcome;
         }
-        const first = await Promise.race([
-          groqOutcome,
-          ao3Sleep(3500).then(function() { return { provider: 'hedge-timer', result: null }; })
-        ]);
+        const first = forcedProvider === 'azure'
+          ? { provider: 'hedge-timer', result: null }
+          : await Promise.race([groqOutcome, ao3Sleep(3500).then(function() { return { provider: 'hedge-timer', result: null }; })]);
         if (first.provider === 'Groq' && first.result) {
           azureRaceController.abort();
           setTranslationProviderStatus('Groq', '번역 완료 · 우선 결과');
@@ -4262,7 +4310,7 @@
         const azurePromise = startAzureBackup();
         if (first.provider === 'Groq') {
           const backup = await azurePromise;
-          if (backup.result) {
+          if (backup && backup.result) {
             cancelGroqAsHedgeLoser();
             setTranslationProviderStatus('Azure Translator', '백업 번역 완료');
             return backup.result;
@@ -5876,6 +5924,35 @@
           const element = document.getElementById(binding[0]);
           if (element) element.addEventListener('click', binding[1]);
           else console.error('[AO3] Header control missing:', binding[0]);
+        });
+        const manualProviderSelectors = ['translationManualProvider', 'readerManualProvider'].map(function(id) { return document.getElementById(id); }).filter(Boolean);
+        manualProviderSelectors.forEach(function(select) {
+          select.addEventListener('change', function() {
+            manualProviderSelectors.forEach(function(other) { if (other !== select) other.value = select.value; });
+          });
+        });
+        ['translationManualProviderBtn', 'readerManualProviderBtn'].forEach(function(id) {
+          const button = document.getElementById(id);
+          if (!button) return;
+          button.addEventListener('click', function() {
+            const provider = (manualProviderSelectors[0] && manualProviderSelectors[0].value) || 'gemini';
+            if (!Number(window._ao3TranslationBatchActiveCount || 0)) {
+              showToast('현재 실행 중인 번역 문단이 없습니다.', 'info');
+              return;
+            }
+            window._ao3ManualProviderRequested = provider;
+            window._ao3ManualSwitchAbortRequested = true;
+            const activeControllers = window._ao3ManualProviderControllers;
+            if (activeControllers) activeControllers.forEach(function(controller) {
+              try { controller.abort('user_selected_provider_switch'); } catch (ignoreManualProviderAbort) {}
+            });
+            const label = provider === 'gemini' ? 'Gemini' : provider === 'workers-ai' ? 'Workers AI' : provider === 'groq' ? 'Groq' : 'Azure Translator';
+            ['translationManualProviderHint', 'readerManualProviderHint'].forEach(function(hintId) {
+              const hint = document.getElementById(hintId);
+              if (hint) hint.textContent = label + '로 현재 진행 문단을 다시 시도하도록 예약했습니다.';
+            });
+            showToast(label + '로 전환합니다. 진행 중 요청을 취소하고 현재 문단을 다시 시도합니다.', 'info');
+          });
         });
         // Manual bookshelf manager controls
         document.getElementById('customShelfCreateToggleBtn').addEventListener('click', function() { document.getElementById('customShelfCreatePanel').classList.toggle('hidden'); document.getElementById('customShelfNameInput').focus(); });
