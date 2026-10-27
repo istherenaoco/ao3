@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '96';
+      window.__AO3_BUILD_VERSION__ = '97';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -3974,10 +3974,17 @@
                   geminiCooldowns[cooldown.key] = cooldown.until;
                   ao3SaveGeminiCooldownStore(geminiCooldowns);
                   const waitSeconds = Math.ceil(cooldown.retryMs / 1000);
+                  const retryAtLabel = new Date(cooldown.until).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' });
+                  const previousGeminiQuota = ao3LoadQuotaStore().snapshots.gemini || {};
+                  ao3SaveQuotaSnapshot('gemini', Object.assign({}, previousGeminiQuota, {
+                    model: modelName, quotaHitAt: Date.now(), keySlot: keyIndex + 1,
+                    cooldownUntil: cooldown.until, cooldownKind: cooldown.daily ? 'daily-limit' : 'rate-limit'
+                  }));
+                  geminiErrorDetail = (geminiErrorDetail ? geminiErrorDetail + ' · ' : '') + '키 ' + (keyIndex + 1) + '번을 ' + retryAtLabel + '까지 자동 제외';
                   console.info('Gemini confirmed HTTP 429; cooling down this model/key for about ' + waitSeconds + 's' + (cooldown.daily ? ' until the daily reset window' : '') + '.');
                 }
                 const geminiReason = 'HTTP ' + res.status + (geminiErrorDetail ? ' · ' + geminiErrorDetail : (res.status === 429 ? ' · 요청 한도 초과(429)' : ' · API 요청 실패'));
-                setTranslationProviderStatus('Gemini', res.status === 429 ? '한도 초과 · 다음 API 확인' : '오류 · 다음 API 확인');
+                setTranslationProviderStatus('Gemini', res.status === 429 ? '키 ' + (keyIndex + 1) + '번 제한 · 다음 키/API 확인' : '오류 · 다음 API 확인');
                 recordTranslationProviderError('Gemini 키 ' + (keyIndex + 1), geminiReason);
                 console.warn(
                   'Gemini key slot ' + (keyIndex + 1) + ' failed with HTTP ' + res.status +
