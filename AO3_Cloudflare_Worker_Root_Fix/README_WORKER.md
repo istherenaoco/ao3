@@ -1,7 +1,7 @@
 # AO3 Cloudflare Worker — v48
 
 ## Cloudflare Workers Builds
-- 프로젝트 폴더를 유지한다면 Root directory: `AO3_Cloudflare_Worker_Root_Fix_ProviderStatus`
+- 프로젝트 폴더를 유지한다면 Root directory: `AO3_Cloudflare_Worker_Root_Fix`
 - Build command: `npm run check`
 - Deploy command: `npx wrangler deploy`
 - `wrangler.jsonc`가 정적 파일 폴더 `./public`와 `AI` 바인딩을 설정합니다.
@@ -23,8 +23,8 @@ Gemini 키는 앱 번역 설정에서 관리할 수 있습니다. API 키를 Git
 
 ## 현재 코드 배치
 - `public/index.html`: 전체 앱 구조
-- `public/assets/app-v48.css`: 앱/뷰어 CSS
-- `public/assets/app-v48.js`: 앱 동작 및 번역·저장·동기화 로직
+- `public/assets/app.css`: 앱/뷰어 CSS
+- `public/assets/app.js`: 앱 동작 및 번역·저장·동기화 로직
 - `public/assets/queue-widget-v44.js`: 대기열 표시 보조 초기화
 - `public/ao3.html`: 기존 링크 호환용 별칭이며 `/`로 이동합니다.
 - `src/index.js`, `src/shared.js`: Worker API 처리
