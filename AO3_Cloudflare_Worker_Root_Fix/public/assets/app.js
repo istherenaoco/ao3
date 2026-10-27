@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '95';
+      window.__AO3_BUILD_VERSION__ = '96';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -307,6 +307,70 @@
           });
         });
         if (dailyLimit) ao3SaveQuotaSnapshot('gemini', { model: String(model || ''), dailyLimit: dailyLimit, quotaId: quotaId, quotaHitAt: Date.now(), keySlot: Number(keyIndex) + 1 });
+      }
+      function ao3GeminiQuotaCooldown(apiKey, model, payload, headers) {
+        const error = payload && payload.error || {};
+        const details = Array.isArray(error.details) ? error.details : [];
+        const violations = [];
+        details.forEach(function(detail) {
+          (Array.isArray(detail && detail.violations) ? detail.violations : []).forEach(function(violation) { violations.push(violation); });
+        });
+        const descriptors = [error.status, error.message].concat(violations.map(function(item) {
+          return [item.quotaId, item.quotaMetric, item.description].filter(Boolean).join(' ');
+        })).join(' ');
+        const isDaily = /per.?day|perday|requests.?per.?day|daily|requests_per_day|quota_exceeded/i.test(descriptors);
+        let retryMs = 0;
+        const retryHeader = headers && headers.get ? headers.get('Retry-After') : null;
+        if (retryHeader) {
+          const seconds = Number(retryHeader);
+          if (Number.isFinite(seconds) && seconds > 0) retryMs = seconds * 1000;
+          else {
+            const retryDate = Date.parse(retryHeader);
+            if (Number.isFinite(retryDate)) retryMs = retryDate - Date.now();
+          }
+        }
+        if (!retryMs) {
+          const retryDetail = details.find(function(detail) { return detail && detail.retryDelay; });
+          const rawDelay = retryDetail && String(retryDetail.retryDelay);
+          const delayMatch = rawDelay && rawDelay.match(/([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)/i);
+          if (delayMatch) retryMs = Number(delayMatch[1]) * ({ ms: 1, s: 1000, m: 60000, h: 3600000 }[delayMatch[2].toLowerCase()]);
+        }
+        if (!retryMs) {
+          const messageDelay = String(error.message || '').match(/retry\s+(?:in\s+)?([0-9]+(?:\.[0-9]+)?)\s*s(?:ec(?:ond)?s?)?/i);
+          if (messageDelay) retryMs = Number(messageDelay[1]) * 1000;
+        }
+        if (isDaily && !retryMs) {
+          // Gemini documents RPD reset at midnight Pacific; calculate that boundary with DST.
+          const now = Date.now();
+          const zone = 'America/Los_Angeles';
+          const local = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date(now));
+          const part = function(type) { return Number(local.find(function(entry) { return entry.type === type; }).value); };
+          const nextDay = new Date(Date.UTC(part('year'), part('month') - 1, part('day') + 1));
+          const targetUtc = Date.UTC(nextDay.getUTCFullYear(), nextDay.getUTCMonth(), nextDay.getUTCDate());
+          const offsetParts = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' }).formatToParts(new Date(targetUtc));
+          const getPart = function(type) { return Number(offsetParts.find(function(entry) { return entry.type === type; }).value); };
+          const representedUtc = Date.UTC(getPart('year'), getPart('month') - 1, getPart('day'), getPart('hour'), getPart('minute'), getPart('second'));
+          retryMs = Math.max(60000, targetUtc - (representedUtc - targetUtc) - now);
+        }
+        if (!retryMs) retryMs = 60000;
+        // A 429 is an explicit rate/quota signal. Scope it to this key and model only;
+        // timeout, abort, network, auth, and server errors never create a cooldown.
+        retryMs = Math.max(1000, Math.min(retryMs, 7 * 86400000));
+        let fingerprint = 2166136261;
+        String(apiKey || '').split('').forEach(function(character) { fingerprint = Math.imul(fingerprint ^ character.charCodeAt(0), 16777619); });
+        const cooldownKey = String(model || '') + ':' + (fingerprint >>> 0).toString(36);
+        return { key: cooldownKey, until: Date.now() + retryMs, retryMs: retryMs, daily: isDaily };
+      }
+      function ao3GetGeminiCooldownStore() {
+        if (window._ao3GeminiKeyCooldownUntil) return window._ao3GeminiKeyCooldownUntil;
+        let saved = {};
+        try { saved = JSON.parse(localStorage.getItem('ao3-gemini-explicit-quota-cooldowns-v1') || '{}') || {}; } catch (ignoreGeminiCooldownRead) {}
+        Object.keys(saved).forEach(function(key) { if (Number(saved[key]) <= Date.now()) delete saved[key]; });
+        window._ao3GeminiKeyCooldownUntil = saved;
+        return saved;
+      }
+      function ao3SaveGeminiCooldownStore(cooldowns) {
+        try { localStorage.setItem('ao3-gemini-explicit-quota-cooldowns-v1', JSON.stringify(cooldowns || {})); } catch (ignoreGeminiCooldownWrite) {}
       }
       function ao3QuotaCount(provider, startAt, endAt) {
         const store = ao3LoadQuotaStore();
@@ -3842,7 +3906,7 @@
           const modelName = (state.settings.geminiModel || DEFAULT_GEMINI_MODEL).trim();
           const startIndex = (window._ao3GeminiNextKeyIndex || 0) % geminiKeys.length;
           window._ao3GeminiNextKeyIndex = (startIndex + 1) % geminiKeys.length;
-          const geminiCooldowns = window._ao3GeminiKeyCooldownUntil || (window._ao3GeminiKeyCooldownUntil = Object.create(null));
+          const geminiCooldowns = ao3GetGeminiCooldownStore();
           let attemptedGeminiKeys = 0;
           // Bound the entire Gemini key-pool attempt for each batch. A list of several
           // slow keys must not multiply the fallback delay without limit.
@@ -3858,7 +3922,10 @@
           for (let attempt = 0; attempt < geminiKeyAttemptLimit; attempt++) {
             const keyIndex = (startIndex + attempt) % geminiKeys.length;
             const apiKey = geminiKeys[keyIndex];
-            if (Number(geminiCooldowns[apiKey] || 0) > Date.now()) continue;
+            let keyFingerprint = 2166136261;
+            String(apiKey).split('').forEach(function(character) { keyFingerprint = Math.imul(keyFingerprint ^ character.charCodeAt(0), 16777619); });
+            const geminiCooldownKey = modelName + ':' + (keyFingerprint >>> 0).toString(36);
+            if (Number(geminiCooldowns[geminiCooldownKey] || 0) > Date.now()) continue;
             let geminiTimedOut = false;
             let geminiQuotaEventId = null;
             attemptedGeminiKeys++;
@@ -3890,8 +3957,9 @@
               }
               if (!res.ok) {
                 let geminiErrorDetail = '';
+                let errorPayload = null;
                 try {
-                  const errorPayload = await res.json();
+                  errorPayload = await res.json();
                   ao3CaptureQuotaResponse('gemini', res.status, errorPayload, res.headers, modelName);
                   if (res.status === 429) ao3CaptureGeminiQuotaFailure(errorPayload, modelName, keyIndex);
                   ao3UpdateQuotaEvent(geminiQuotaEventId, { status: 'HTTP ' + res.status });
@@ -3902,9 +3970,11 @@
                   }
                 } catch (ignoreGeminiErrorBody) {}
                 if (res.status === 429) {
-                  const retryAfter = Number(res.headers.get('Retry-After') || 0);
-                  const cooldownMs = retryAfter > 0 ? Math.min(retryAfter * 1000, 15 * 60 * 1000) : 60 * 1000;
-                  geminiCooldowns[apiKey] = Date.now() + Math.max(1000, cooldownMs);
+                  const cooldown = ao3GeminiQuotaCooldown(apiKey, modelName, errorPayload, res.headers);
+                  geminiCooldowns[cooldown.key] = cooldown.until;
+                  ao3SaveGeminiCooldownStore(geminiCooldowns);
+                  const waitSeconds = Math.ceil(cooldown.retryMs / 1000);
+                  console.info('Gemini confirmed HTTP 429; cooling down this model/key for about ' + waitSeconds + 's' + (cooldown.daily ? ' until the daily reset window' : '') + '.');
                 }
                 const geminiReason = 'HTTP ' + res.status + (geminiErrorDetail ? ' · ' + geminiErrorDetail : (res.status === 429 ? ' · 요청 한도 초과(429)' : ' · API 요청 실패'));
                 setTranslationProviderStatus('Gemini', res.status === 429 ? '한도 초과 · 다음 API 확인' : '오류 · 다음 API 확인');
@@ -3953,15 +4023,15 @@
               recordTranslationProviderError('Gemini key ' + (keyIndex + 1), message);
               console.warn('Gemini request failed; ' + (geminiTimedOut || (err && err.name === 'AbortError') ? 'skipping further Gemini attempts for this batch.' : 'trying one alternate key or the next provider.'), message);
               if (geminiTimedOut || (err && err.name === 'AbortError')) {
-                if (window._ao3ManualSwitchAbortRequested) break;
-                geminiCooldowns[apiKey] = Date.now() + 2 * 60 * 1000;
+                // Transient timeout/abort does not prove quota exhaustion. Fall back for
+                // this batch, then allow Gemini to be first again on the next one.
                 break;
               }
             }
           }
           if (attemptedGeminiKeys === 0) {
-            recordTranslationProviderError('Gemini', '설정된 모든 키가 일시 제한 중이거나 요청 가능한 키가 없습니다.');
-            console.info('Gemini keys are temporarily rate-limited; skipping Gemini for this batch and continuing to fallback engines.');
+            recordTranslationProviderError('Gemini', '이 모델의 등록 키가 명확한 HTTP 429 냉각 시간 안에 있어 이번 문단에서 건너뜁니다.');
+            console.info('All configured Gemini keys for this model are cooling down after explicit HTTP 429 responses; continuing to fallback engines.');
           }
           // All Gemini keys failed or are cooling down; try Workers AI, then Groq with Azure hedge, then free endpoint.
         }
