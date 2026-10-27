@@ -1646,6 +1646,37 @@ html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [cla
   border-color: #a3bdaa !important;
 }
 
+/* Green mode: make translation queues visibly green and strengthen their text contrast. */
+html[data-app-theme="green"] #ao3LinkQueueBox,
+html[data-app-theme="green"] body #ao3LinkQueueBox,
+html[data-app-theme="green"] body #ao3LinkQueueBox[style] {
+  background: #d5e6d8 !important;
+  background-color: #d5e6d8 !important;
+  color: #20382a !important;
+  border-color: #8eac95 !important;
+}
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueStatus,
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueActive,
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList,
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueEmpty,
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList li,
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList li > div,
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList li > div * {
+  color: #20382a !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList > li {
+  background-color: #e7f0e8 !important;
+  border-color: #a3bdaa !important;
+}
+html[data-app-theme="green"] #ao3LinkQueueBox button {
+  font-weight: 700 !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer > * {
+  font-weight: 600;
+}
+
 
 
 /* v82: reader display/settings drawer must use the green app theme too.

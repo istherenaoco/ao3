@@ -14,5 +14,5 @@ assert(js.includes("metadataTagsForLabels(['fandom', 'fandoms'])") && js.include
 assert(js.includes('renderAo3FileImportPreview(parsed)') && js.includes('selectedIndexes.map(function(index)'), 'file import should stage the selected chapters before translation');
 assert(js.includes('parseAo3HtmlDocument(text, \'\')') && js.includes("parsed.reason === 'adult_gate'"), 'adult gate files should be reported instead of silently imported');
 assert(css.includes('html[data-app-theme="green"] body #ao3LinkQueueBox[style]') && css.includes('background-color: #edf5ee !important;'), 'green queue background must override the inline dark background');
-assert(html.includes('app.css?v=83.0') && html.includes('app.js?v=87.0'), 'upload and queue color fixes should use fresh cached assets');
+assert(html.includes('app.css?v=84.0') && html.includes('app.js?v=87.0'), 'upload and queue color fixes should use fresh cached assets');
 console.log('Login-only AO3 file import and green queue contrast checks passed.');
