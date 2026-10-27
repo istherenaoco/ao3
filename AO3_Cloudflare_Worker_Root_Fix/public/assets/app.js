@@ -2322,7 +2322,7 @@
 
         // Detect Cloudflare challenge and AO3 access interstitials before extracting metadata.
         if (
-          /just a moment\.\.\.|cf-browser-verification|attention required!\s*\|\s*cloudflare|_cf_chl_opt|cf-chl-/i.test(htmlText)
+          /just a moment\.\.\.|cf-browser-verification|attention required!\s*\|\s*cloudflare|shields are up!?\s*\|\s*archive of our own|_cf_chl_opt|cf-chl-/i.test(htmlText)
         ) {
           return { meta: {}, chapters: [], reason: 'cloudflare' };
         }
@@ -2508,8 +2508,8 @@
       // Parse Jina Reader Markdown output when raw HTML proxies are blocked by Cloudflare
       function parseAo3JinaMarkdown(mdText, fallbackSourceUrl) {
         if (!mdText || mdText.length < 200) return { meta: {}, chapters: [] };
-        if (mdText.includes('Just a moment...') || mdText.includes('Attention Required!')) {
-          return { meta: {}, chapters: [] };
+        if (/Just a moment\.\.\.|Attention Required!|Shields are up!?\s*\|\s*Archive of Our Own/i.test(mdText)) {
+          return { meta: {}, chapters: [], reason: 'cloudflare' };
         }
 
         let title = '';
