@@ -1,0 +1,24 @@
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(__dirname, '..');
+const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+const js = fs.readFileSync(path.join(root, 'public/assets/app.js'), 'utf8');
+function assert(ok, message) { if (!ok) throw new Error(message); }
+assert(html.includes('id="geminiCooldownTabBtn"') && html.includes('Gemini 키 냉각'), 'Gemini cooldown tab missing');
+assert(html.includes('id="geminiCooldownKeyRows"'), 'per-key cooldown status area missing');
+assert(html.includes('id="geminiCooldownEnabledInput"'), 'cooldown enable/disable switch missing');
+assert(js.includes('geminiCooldownEnabled: true'), 'cooldown must be enabled by default for compatibility');
+assert(js.includes('state.settings.geminiCooldownEnabled !== false'), 'cooldown default migration missing');
+assert(js.includes("ao3GeminiCooldownStorageKey(apiKey, model)"), 'consistent model/key cooldown identity missing');
+assert(js.includes("ao3SetGeminiNextKeyIndex(keyIndex + 1, geminiKeys.length)"), 'round-robin cursor is not advanced after considered key');
+assert(js.includes("localStorage.setItem('ao3-gemini-next-key-index-v1'"), 'round-robin cursor does not survive reload');
+assert(js.includes('const geminiKeyPassCount = 2;') && js.includes('const geminiKeyVisitLimit = geminiKeys.length * geminiKeyPassCount;'), 'Gemini must use two full key-pool passes');
+assert(js.includes('while (consideredGeminiKeys < geminiKeyVisitLimit)'), 'Gemini key-pool loop must visit every configured key twice');
+assert(js.includes('state.settings.geminiCooldownEnabled !== false && Number(geminiCooldowns[geminiCooldownKey] || 0) > Date.now()'), 'cooldown-on must skip keys whose 429 wait remains');
+assert(js.includes('coolingSkippedGeminiKeys++'), 'cooldown skips must be visible in the cycle log');
+assert(js.includes('if (state.settings.geminiCooldownEnabled !== false) {\n                    const cooldown = ao3GeminiQuotaCooldown'), 'new 429 cooldowns must only be recorded while cooldown is enabled');
+assert(js.includes('ao3FormatGeminiCooldownRemaining(remaining)'), 'remaining cooldown time is not rendered');
+assert(js.includes("['groqEnabled', 'workersAiEnabled', 'azureEnabled', 'geminiCooldownEnabled']"), 'cooldown setting missing from Google Drive user preferences');
+assert(js.includes("if (typeof decoded.settings.geminiCooldownEnabled === 'boolean') state.settings.geminiCooldownEnabled = decoded.settings.geminiCooldownEnabled;"), 'cooldown setting missing from encrypted settings restore');
+assert(html.includes('app.js?v=107.0'), 'app cache-busting version is not updated');
+console.log('Gemini key rotation and cooldown regression checks passed.');
