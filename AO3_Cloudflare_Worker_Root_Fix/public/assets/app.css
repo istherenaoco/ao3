@@ -1745,3 +1745,26 @@ html[data-app-theme="green"] #readerDisplayDrawer input[type="checkbox"],
 html[data-app-theme="green"] #readerDisplayDrawer input[type="radio"] {
   accent-color: #477653 !important;
 }
+
+/* Reader chrome follows the active reading canvas instead of using a separate app tint. */
+html[data-reader-canvas-theme="paper"] {
+  --reader-chrome-bg: #fbf8f1;
+  --reader-chrome-fg: #243042;
+  --reader-chrome-border: #d8d0c2;
+}
+html[data-reader-canvas-theme="green"] {
+  --reader-chrome-bg: #bcd6c1;
+  --reader-chrome-fg: #20382a;
+  --reader-chrome-border: #8eac95;
+}
+html[data-reader-canvas-theme="dark"] {
+  --reader-chrome-bg: #070d1a;
+  --reader-chrome-fg: #e3eaf5;
+  --reader-chrome-border: #29364b;
+}
+html[data-reader-canvas-theme] #readerControlsBar,
+html[data-reader-canvas-theme] #readerDisplayDrawer {
+  background: var(--reader-chrome-bg) !important;
+  color: var(--reader-chrome-fg) !important;
+  border-color: var(--reader-chrome-border) !important;
+}
