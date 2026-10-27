@@ -19,11 +19,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=Gothic+A1:wght@300;400;500;600;700&family=Noto+Serif+KR:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/app.css?v=82.0">
+  <link rel="stylesheet" href="/assets/app.css?v=83.0">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col selection:bg-rose-100 selection:text-rose-900">
-  <!-- AO3_BUILD=ao3-bookshelf-ui-v86.0 -->
+  <!-- AO3_BUILD=ao3-bookshelf-ui-v87.0 -->
 <!-- Top Navigation Header -->
   <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
@@ -214,20 +214,29 @@
                 <div id="ao3FetchLogList" class="space-y-1 text-[11px] leading-relaxed"></div>
               </div>
 
-              <!-- 1-Click AO3 Downloaded HTML/TXT File Import & Bookmarklet Helper -->
-              <div id="ao3FileDropZone" style="display:none!important" class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-rose-50/70 border border-dashed border-rose-300 text-xs transition">
+              <!-- Upload AO3 HTML and select which chapters to translate. -->
+              <div id="ao3FileDropZone" class="space-y-3 p-3 rounded-xl bg-rose-50/70 border border-dashed border-rose-300 text-xs transition">
                 <div class="space-y-0.5">
-                  <p class="font-bold text-rose-950">⚡ AO3 다운로드 HTML / TXT 파일 0.1초 즉시 추출</p>
-                  <p class="text-[11px] text-rose-800">AO3 작품 상단 <strong>[Download → HTML]</strong> 파일을 여기에 끌어다 놓거나 선택하면 네트워크 대기 없이 전 챕터를 즉시 추출합니다.</p>
+                  <p class="font-bold text-rose-950">로그인 전용 작품 파일 불러오기</p>
+                  <p class="text-[11px] text-rose-800">로그인한 AO3에서 <strong>[Download → HTML]</strong>을 선택하세요. 파일을 분석한 뒤 원하는 챕터만 골라 번역합니다. HTML이 가장 빠르고 메타데이터 인식이 정확합니다.</p>
+                </div>
+                <div id="ao3FileImportPreview" class="hidden space-y-3 rounded-lg border border-rose-200 bg-white p-3" aria-live="polite">
+                  <div id="ao3FileImportMetadata" class="space-y-1"></div>
+                  <div class="flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+                    <strong id="ao3FileImportChapterCount" class="text-slate-800">챕터 선택</strong>
+                    <div class="flex gap-2">
+                      <button id="ao3FileSelectAllBtn" type="button" class="text-rose-700 underline">모두 선택</button>
+                      <button id="ao3FileSelectNoneBtn" type="button" class="text-slate-500 underline">선택 해제</button>
+                    </div>
+                  </div>
+                  <div id="ao3FileImportChapterList" class="max-h-48 space-y-1 overflow-y-auto"></div>
+                  <button id="ao3TranslateSelectedFileChaptersBtn" type="button" class="w-full rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white hover:bg-rose-800">선택한 챕터만 번역하고 저장</button>
                 </div>
                 <div class="flex items-center gap-1.5">
-                  <input id="ao3HtmlFileInput" type="file" accept=".html,.htm,.txt,.xhtml" multiple class="hidden" />
+                  <input id="ao3HtmlFileInput" type="file" accept=".html,.htm,.xhtml,.txt,text/html,text/plain,application/xhtml+xml" class="hidden" />
                   <button id="ao3HtmlFileBtn" type="button" class="px-3 py-2 rounded-xl bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold text-xs shadow-2xs transition flex items-center gap-1.5">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    <span>AO3 HTML/TXT 파일 불러오기</span>
-                  </button>
-                  <button id="copyAo3ExtractorScriptBtn" type="button" class="px-3 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs shadow-2xs transition">
-                    1클릭 추출기 복사
+                    <span>AO3 HTML/TXT 파일 선택</span>
                   </button>
                 </div>
               </div>
@@ -1046,7 +1055,7 @@
   <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
   <!-- Application Script -->
-  <script src="/assets/app.js?v=86.0"></script>
+  <script src="/assets/app.js?v=87.0"></script>
 
   <script id="ao3QueueWidgetBootV4" src="/assets/queue-widget-v44.js?v=74.0"></script>
 

@@ -2513,12 +2513,25 @@
         const workAuthorEl = workPreface ? workPreface.querySelector('h3.byline.heading, .byline') : null;
         const authorMetaEl = doc.querySelector('meta[name="author"], meta[property="article:author"]');
 
-        const workFandomEl = doc.querySelector('#workskin .preface dd.fandom.tags a.tag') ||
-          doc.querySelector('#preface dd.fandom.tags a.tag') ||
-          doc.querySelector('dd.fandom.tags a.tag');
+        const workFandomEls = Array.from(doc.querySelectorAll('#workskin .preface dd.fandom.tags a.tag, #preface dd.fandom.tags a.tag, dd.fandom.tags a.tag'));
+        const workCategoryEls = Array.from(doc.querySelectorAll('#workskin .preface dd.category.tags a.tag, #preface dd.category.tags a.tag, dd.category.tags a.tag'));
+        const workTagEls = Array.from(doc.querySelectorAll('#workskin .preface dd.relationship.tags a.tag, #workskin .preface dd.character.tags a.tag, #workskin .preface dd.freeform.tags a.tag, #workskin .preface dd.warning.tags a.tag, #preface dd.relationship.tags a.tag, #preface dd.character.tags a.tag, #preface dd.freeform.tags a.tag, #preface dd.warning.tags a.tag, dd.relationship.tags a.tag, dd.character.tags a.tag, dd.freeform.tags a.tag, dd.warning.tags a.tag'));
 
         const cleanMetaText = function(value) {
           return String(value || '').replace(/\s+/g, ' ').trim();
+        };
+        const metadataTagsForLabels = function(labels) {
+          const values = [];
+          Array.from(doc.querySelectorAll('dt')).forEach(function(term) {
+            const label = cleanMetaText(term.textContent).replace(/:$/, '').toLowerCase();
+            if (labels.indexOf(label) === -1) return;
+            const valueNode = term.nextElementSibling;
+            if (!valueNode || valueNode.tagName !== 'DD') return;
+            const linkedTags = Array.from(valueNode.querySelectorAll('a.tag')).map(function(el) { return cleanMetaText(el.textContent); }).filter(Boolean);
+            const plainText = cleanMetaText(valueNode.textContent);
+            (linkedTags.length ? linkedTags : plainText.split(/,\s*/)).forEach(function(value) { if (value) values.push(value); });
+          });
+          return Array.from(new Set(values));
         };
         const pageTitleRaw = cleanMetaText(doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
           doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
@@ -2533,10 +2546,16 @@
           : cleanMetaText(workAuthorEl ? workAuthorEl.textContent.replace(/^by\s+/i, '') :
               (authorMetaEl ? authorMetaEl.getAttribute('content') : ''));
 
+        const fandoms = Array.from(new Set(workFandomEls.map(function(el) { return cleanMetaText(el.textContent); }).filter(Boolean).concat(metadataTagsForLabels(['fandom', 'fandoms']))));
+        const categories = Array.from(new Set(workCategoryEls.map(function(el) { return cleanMetaText(el.textContent); }).filter(Boolean).concat(metadataTagsForLabels(['category', 'categories']))));
+        const tags = Array.from(new Set(workTagEls.map(function(el) { return cleanMetaText(el.textContent); }).filter(Boolean).concat(metadataTagsForLabels(['archive warning', 'archive warnings', 'relationship', 'relationships', 'character', 'characters', 'additional tags']))));
         const extractedMeta = {
           title: rawTitle || 'AO3 추출 작품',
           author: cleanAo3AuthorName(rawAuthor) || 'Anonymous',
-          fandom: cleanMetaText(workFandomEl ? workFandomEl.textContent : ''),
+          fandom: fandoms.join(', '),
+          categories: categories,
+          tags: tags,
+          genre: Array.from(new Set(fandoms.concat(categories))).join(' · '),
           summary: ''
         };
 
@@ -5888,8 +5907,8 @@
               authorInput.value = cleanAo3AuthorName(authorInput.value);
             }
             const fandomInput = document.getElementById('novelFandomInput');
-            if (parsed.meta.fandom && !fandomInput.value.trim()) {
-              fandomInput.value = parsed.meta.fandom;
+            if ((parsed.meta.genre || parsed.meta.fandom) && !fandomInput.value.trim()) {
+              fandomInput.value = parsed.meta.genre || parsed.meta.fandom;
             }
             const summaryInput = document.getElementById('novelSummaryInput');
             // AO3 Summary import is disabled; do not fill the user memo field automatically.
@@ -5916,22 +5935,6 @@
 
 
 
-        document.getElementById('copyAo3ExtractorScriptBtn').addEventListener('click', function() {
-          const bookmarkletCode = "javascript:(function(){var h=document.documentElement.outerHTML;navigator.clipboard.writeText(h).then(function(){document.title='[복사완료] '+document.title;});})();";
-          try {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(bookmarkletCode);
-            }
-          } catch (e) {}
-          const logList = document.getElementById('ao3FetchLogList');
-          if (logList) logList.innerHTML = '';
-          appendFetchLog('📋 [1클릭 추출 북마클릿 코드 복사 완료]');
-          appendFetchLog('1) AO3에서 원하는 소설 페이지(Entire Work)를 여세요.');
-          appendFetchLog('2) 가장 빠르고 확실한 방법: AO3 상단 우측의 [Download → HTML]을 누른 뒤 내려받은 파일을 이 화면으로 드래그하거나 [AO3 HTML/TXT 파일 불러오기]를 누르면 전 챕터가 1초 만에 자동 분리·번역됩니다.');
-          appendFetchLog('3) 또는 브라우저 주소창/북마크에 방금 복사된 스크립트를 실행하면 HTML 전체가 복사되어 [직접 붙여넣기] 탭에서 100% 자동 파싱됩니다.');
-          showToast('1클릭 추출 스크립트 및 안내가 표시되었습니다.');
-        });
-
         const dropZone = document.getElementById('ao3FileDropZone');
         dropZone.addEventListener('dragover', function(e) {
           e.preventDefault();
@@ -5955,38 +5958,110 @@
           document.getElementById('ao3HtmlFileInput').click();
         });
 
-        document.getElementById('ao3HtmlFileInput').addEventListener('change', async function(e) {
-          const files = Array.from(e.target.files || []);
-          if (files.length === 0) return;
+        let pendingAo3FileImport = null;
+        function renderAo3FileImportPreview(parsed) {
+          const preview = document.getElementById('ao3FileImportPreview');
+          const metaBox = document.getElementById('ao3FileImportMetadata');
+          const chapterList = document.getElementById('ao3FileImportChapterList');
+          const chapterCount = document.getElementById('ao3FileImportChapterCount');
+          if (!preview || !metaBox || !chapterList || !chapterCount) return;
+          pendingAo3FileImport = parsed;
+          const meta = parsed.meta || {};
+          const tags = (meta.categories || []).concat(meta.tags || []).filter(Boolean);
+          metaBox.innerHTML = '<h3 class="text-sm font-bold text-slate-900">' + escapeHtml(meta.title || '제목 미확인') + '</h3>' +
+            '<p class="text-xs text-slate-700">작가: ' + escapeHtml(meta.author || '작가 미확인') + '</p>' +
+            '<p class="text-xs text-slate-700">원작 / 장르: ' + escapeHtml(meta.genre || meta.fandom || '분류 미확인') + '</p>' +
+            (tags.length ? '<p class="text-[11px] leading-relaxed text-slate-500">태그: ' + escapeHtml(tags.slice(0, 30).join(' · ')) + '</p>' : '');
+          chapterCount.textContent = '챕터 선택 (' + parsed.chapters.length + '개)';
+          chapterList.innerHTML = parsed.chapters.map(function(chapter, index) {
+            const paragraphCount = Array.isArray(chapter.paragraphs) ? chapter.paragraphs.length : 0;
+            return '<label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-slate-800 hover:bg-rose-50">' +
+              '<input type="checkbox" data-file-import-chapter="' + index + '" checked class="rounded border-slate-300 text-rose-700 focus:ring-rose-600">' +
+              '<span class="min-w-0 flex-1 truncate">' + (index + 1) + '. ' + escapeHtml(chapter.title || ('Chapter ' + (index + 1))) + '</span>' +
+              '<span class="shrink-0 text-[10px] text-slate-500">' + paragraphCount + '문단</span></label>';
+          }).join('');
+          preview.classList.remove('hidden');
+          preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
 
-          let lastSavedNovel = null;
-          for (let i = 0; i < files.length; i++) {
-            const file = files[i];
+        const chapterSelectAll = document.getElementById('ao3FileSelectAllBtn');
+        if (chapterSelectAll) chapterSelectAll.addEventListener('click', function() {
+          document.querySelectorAll('[data-file-import-chapter]').forEach(function(input) { input.checked = true; });
+        });
+        const chapterSelectNone = document.getElementById('ao3FileSelectNoneBtn');
+        if (chapterSelectNone) chapterSelectNone.addEventListener('click', function() {
+          document.querySelectorAll('[data-file-import-chapter]').forEach(function(input) { input.checked = false; });
+        });
+        document.getElementById('ao3TranslateSelectedFileChaptersBtn').addEventListener('click', async function(event) {
+          if (!pendingAo3FileImport) return;
+          const selectedIndexes = Array.from(document.querySelectorAll('[data-file-import-chapter]:checked')).map(function(input) {
+            return Number(input.getAttribute('data-file-import-chapter'));
+          }).filter(function(index) { return Number.isInteger(index) && index >= 0 && index < pendingAo3FileImport.chapters.length; });
+          if (!selectedIndexes.length) { showToast('번역할 챕터를 하나 이상 선택해 주세요.', 'warning'); return; }
+          const button = event.currentTarget;
+          button.disabled = true;
+          const originalText = button.textContent;
+          button.textContent = '선택한 ' + selectedIndexes.length + '개 챕터 번역 중…';
+          const parsed = {
+            meta: Object.assign({}, pendingAo3FileImport.meta || {}),
+            chapters: selectedIndexes.map(function(index) { return pendingAo3FileImport.chapters[index]; })
+          };
+          document.getElementById('novelTitleInput').value = parsed.meta.title || '';
+          document.getElementById('novelAuthorInput').value = parsed.meta.author || '';
+          document.getElementById('novelFandomInput').value = parsed.meta.genre || parsed.meta.fandom || '';
+          try {
+            const savedNovel = await autoTranslateAndSaveWorkToBookshelf(parsed, '');
+            if (savedNovel) {
+              pendingAo3FileImport = null;
+              document.getElementById('ao3FileImportPreview').classList.add('hidden');
+              showToast('선택한 ' + selectedIndexes.length + '개 챕터를 번역해 책장에 저장했습니다.');
+            }
+          } catch (error) {
+            showToast('선택 챕터를 저장하지 못했습니다: ' + String(error && error.message || error), 'error');
+          } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+          }
+        });
+
+        document.getElementById('ao3HtmlFileInput').addEventListener('change', async function(e) {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          const extension = String(file.name || '').split('.').pop().toLowerCase();
+          if (file.size > 25 * 1024 * 1024) {
+            showToast('파일은 25MB 이하로 선택해 주세요.', 'warning'); e.target.value = ''; return;
+          }
+          if (!['html', 'htm', 'xhtml', 'txt'].includes(extension)) {
+            showToast('AO3 다운로드 메뉴에서 HTML 형식으로 저장한 파일을 선택해 주세요.', 'warning'); e.target.value = ''; return;
+          }
+          try {
+            appendFetchLog('선택한 파일을 분석하는 중…');
             const text = await file.text();
             let parsed = null;
-            if (file.name.toLowerCase().endsWith('.html') || file.name.toLowerCase().endsWith('.htm') || text.includes('<div') || text.includes('<p')) {
+            if (extension === 'txt') {
+              const paragraphs = text.split(/\n\s*\n+/).map(function(value) { return value.replace(/\r/g, '').trim(); }).filter(Boolean);
+              if (paragraphs.length) parsed = {
+                meta: { title: file.name.replace(/\.[^.]+$/, ''), author: '', fandom: '', genre: '', tags: [], categories: [], summary: '' },
+                chapters: [{ title: file.name.replace(/\.[^.]+$/, ''), paragraphs: normalizeAndMergeBrokenParagraphs(paragraphs), sourceUrl: '' }]
+              };
+            } else {
               parsed = parseAo3HtmlDocument(text, '');
-            }
-            if (!parsed || !parsed.chapters || parsed.chapters.length === 0) {
-              const lines = text.split(/\n\s*\n|\n/).map(function(s) { return s.trim(); }).filter(Boolean);
-              if (lines.length > 0) {
-                parsed = {
-                  meta: { title: file.name.replace(/\.[^.]+$/, ''), author: 'AO3 Author' },
-                  chapters: [{ title: file.name.replace(/\.[^.]+$/, ''), paragraphs: lines }]
-                };
+              if (parsed && parsed.reason === 'adult_gate') {
+                throw new Error('파일에 성인 인증 화면만 있습니다. 로그인 상태에서 AO3의 Download → HTML을 다시 저장해 주세요.');
               }
             }
-            if (parsed && parsed.chapters && parsed.chapters.length > 0) {
-              lastSavedNovel = await autoTranslateAndSaveWorkToBookshelf(parsed, '');
+            if (!parsed || !Array.isArray(parsed.chapters) || parsed.chapters.length === 0) {
+              throw new Error('파일에서 챕터 본문을 찾지 못했습니다. AO3의 Download → HTML 파일인지 확인해 주세요.');
             }
-          }
-
-          e.target.value = '';
-          if (lastSavedNovel) {
-            switchView('bookshelf');
-            showToast('"' + lastSavedNovel.title + '" (원작자: ' + lastSavedNovel.author + ') 소설이 자동 번역되어 책장에 저장되었습니다!');
-          } else {
-            showToast('선택한 파일에서 본문을 찾지 못했습니다.', 'warning');
+            renderAo3FileImportPreview(parsed);
+            appendFetchLog('작품 정보와 ' + parsed.chapters.length + '개 챕터를 읽었습니다. 번역할 챕터를 선택해 주세요.');
+          } catch (error) {
+            pendingAo3FileImport = null;
+            document.getElementById('ao3FileImportPreview').classList.add('hidden');
+            showToast(error && error.message ? error.message : '파일 분석에 실패했습니다.', 'error');
+            appendFetchLog('파일 분석 실패');
+          } finally {
+            e.target.value = '';
           }
         });
 
