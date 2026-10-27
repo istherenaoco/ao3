@@ -14,7 +14,7 @@ assert(html.includes('name="theme-color" content="#bcd6c1"'), 'Browser chrome th
 assert(js.includes("themeMeta.setAttribute('content', next === 'green' ? '#bcd6c1'"), 'Theme-color metadata does not follow theme changes');
 assert(css.includes('html[data-app-theme="green"] .reader-spacing-stepper button'), 'Green stepper contrast override is missing');
 assert(css.includes('html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueStatus'), 'Green queue text contrast override is missing');
-assert(html.includes('app.css?v=84.0') && html.includes('app.js?v=87.0'), 'Theme/app cache-busting versions were not updated');
+assert(html.includes('app.css?v=85.0') && html.includes('app.js?v=88.0'), 'Theme/app cache-busting versions were not updated');
 assert(!html.includes('class="reader-theme-btn'), 'Reader-only background theme picker still exists');
 assert(!js.includes("document.querySelectorAll('.reader-theme-btn').forEach(function(btn)"), 'Reader-only theme click handler still exists');
 assert(html.includes('id="readerFontFamilySelect"'), 'Reader typography controls were accidentally removed');

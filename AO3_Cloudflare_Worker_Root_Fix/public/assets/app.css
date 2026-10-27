@@ -1677,6 +1677,26 @@ html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer > * 
   font-weight: 600;
 }
 
+#readerTranslationLiveText > p { overflow-wrap: anywhere; white-space: pre-wrap; }
+#readerTranslationProgress[data-reader-theme="dark"] {
+  background: #15271c !important;
+  border-color: #355b40 !important;
+  color: #e2f1e5 !important;
+}
+#readerTranslationProgress[data-reader-theme="dark"] h3,
+#readerTranslationProgress[data-reader-theme="dark"] p,
+#readerTranslationProgress[data-reader-theme="dark"] strong { color: #d7eadb !important; }
+#readerTranslationProgress[data-reader-theme="dark"] #readerTranslationLiveText > p { background: #1c3325 !important; }
+#readerTranslationProgress[data-reader-theme="green"] {
+  background: #d5e6d8 !important;
+  border-color: #8eac95 !important;
+  color: #20382a !important;
+}
+#readerTranslationProgress[data-reader-theme="green"] h3,
+#readerTranslationProgress[data-reader-theme="green"] p,
+#readerTranslationProgress[data-reader-theme="green"] strong { color: #20382a !important; }
+#readerTranslationProgress[data-reader-theme="green"] #readerTranslationLiveText > p { background: #edf5ee !important; }
+
 
 
 /* v82: reader display/settings drawer must use the green app theme too.
