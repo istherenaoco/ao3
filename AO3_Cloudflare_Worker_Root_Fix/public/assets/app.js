@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '68';
+      window.__AO3_BUILD_VERSION__ = '89';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -9,6 +9,11 @@
       const DELETED_IDS_KEY = 'ao3_korean_deleted_ids_v1';
       const DEFAULT_GOOGLE_CLIENT_ID = '821952251109-upebojq1da9ep7cmrjg18hlukdppmjru.apps.googleusercontent.com';
       const DRIVE_FOLDER_NAME = 'AO3서재';
+      const TRANSLATION_FAILURE_REPORTS_KEY = 'ao3_translation_failure_reports_v1';
+      const DRIVE_FAILURE_REPORTS_FOLDER_NAME = '번역 실패 리포트';
+      const MAX_PENDING_TRANSLATION_FAILURE_REPORTS = 50;
+      let translationFailureReportFlushTimer = null;
+      let translationFailureReportFlushBusy = false;
       // Cloudflare Worker API routes run on this same origin under /api/*.
       const DRIVE_RECONNECT_KEY = 'ao3_google_drive_reconnect_v1';
       // Session-scoped token cache lets a connected tab auto-sync after reload without persisting OAuth credentials across browser sessions.
@@ -915,6 +920,7 @@
         }
         if (isDriveTokenValid()) {
           await syncWithGoogleDrive(false);
+          await flushPendingTranslationFailureReports();
           return;
         }
         const clientId = (state.settings.googleClientId || DEFAULT_GOOGLE_CLIENT_ID).trim();
@@ -940,6 +946,7 @@
                   sessionStorage.setItem(DRIVE_ACCESS_TOKEN_EXPIRY_SESSION_KEY, String(state.drive.tokenExpiresAt));
                 } catch (e) {}
                 await rememberGoogleDriveAccountHint(tokenResponse.access_token);
+                await flushPendingTranslationFailureReports();
                 if (state.currentView !== 'bookshelf') {
                   window._ao3DriveNeedsSync = true;
                   updateDriveUiStatus('Google Drive 연결됨', 'connected');
@@ -982,6 +989,7 @@
             // Wait for the local IndexedDB library to finish loading before comparing/uploading data.
             await libraryHydrationPromise;
             if (isDriveTokenValid()) {
+              await flushPendingTranslationFailureReports();
               try {
                 const quotaFolderId = await ensureDriveBookshelfFolder();
                 await syncProviderQuotaWithGoogleDrive(quotaFolderId);
@@ -1309,6 +1317,28 @@
         const created = await createRes.json();
         state.drive.folderId = created.id;
         return state.drive.folderId;
+      }
+
+      async function ensureDriveFailureReportsFolder() {
+        const bookshelfFolderId = await ensureDriveBookshelfFolder();
+        const q = "'" + bookshelfFolderId + "' in parents and name = '" + DRIVE_FAILURE_REPORTS_FOLDER_NAME + "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+        const listResponse = await driveApiFetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)&spaces=drive');
+        if (!listResponse.ok) throw new Error('Drive failure report folder lookup failed (HTTP ' + listResponse.status + ').');
+        const data = await listResponse.json();
+        if (data.files && data.files.length) return data.files[0].id;
+
+        const createResponse = await driveApiFetch('https://www.googleapis.com/drive/v3/files', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: DRIVE_FAILURE_REPORTS_FOLDER_NAME,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [bookshelfFolderId]
+          })
+        });
+        if (!createResponse.ok) throw new Error('Drive failure report folder creation failed (HTTP ' + createResponse.status + ').');
+        const created = await createResponse.json();
+        if (!created || !created.id) throw new Error('Drive did not return a failure report folder ID.');
+        return created.id;
       }
 
       function getNovelTimestamp(novel) {
@@ -3574,23 +3604,122 @@
         return list.slice(-5).join(' | ');
       }
 
-      function downloadTranslationFailureReport(chapterTitle, error) {
+      function loadPendingTranslationFailureReports() {
+        try {
+          const value = JSON.parse(localStorage.getItem(TRANSLATION_FAILURE_REPORTS_KEY) || '[]');
+          return Array.isArray(value) ? value.filter(function(item) { return item && item.id && item.report; }) : [];
+        } catch (e) { return []; }
+      }
+
+      function savePendingTranslationFailureReports(reports) {
+        try {
+          localStorage.setItem(TRANSLATION_FAILURE_REPORTS_KEY, JSON.stringify((reports || []).slice(-MAX_PENDING_TRANSLATION_FAILURE_REPORTS)));
+        } catch (e) {
+          console.warn('Could not persist the pending translation failure report queue.');
+        }
+      }
+
+      function redactTranslationFailureSecrets(value) {
+        let safe = String(value || '');
+        const settings = state && state.settings ? state.settings : {};
+        [settings.geminiApiKey, settings.geminiApiKeys, settings.groqApiKey, settings.azureTranslatorKey].forEach(function(secret) {
+          String(secret || '').split(/[\s,;]+/).filter(function(part) { return part.length >= 8; }).forEach(function(part) {
+            safe = safe.split(part).join('[REDACTED API KEY]');
+          });
+        });
+        return safe
+          .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[REDACTED GOOGLE API KEY]')
+          .replace(/\b(?:gsk_|sk-)[A-Za-z0-9_-]{16,}/g, '[REDACTED API KEY]')
+          .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, 'Bearer [REDACTED]');
+      }
+
+      function reportTranslationFailureToDrive(chapterTitle, error) {
         const errors = (window._ao3TranslationProviderErrors || []).slice();
-        const report = [
+        const report = redactTranslationFailureSecrets([
           'AO3 번역 실패 보고서',
-          '시각: ' + new Date().toLocaleString('ko-KR'),
+          '앱 빌드: ' + String(window.__AO3_BUILD_VERSION__ || 'unknown'),
+          '시각: ' + new Date().toISOString(),
           '챕터: ' + String(chapterTitle || '(제목 없음)'),
           '결과: API 공급자 순환 ' + Number(error && error.translationRoundsUsed || 1) + '회 후 중단. 원문은 번역 완료로 저장되지 않았습니다.',
           '최종 오류: ' + String(error && error.message || error || '알 수 없는 오류'),
           '', '공급자 시도 및 오류:', errors.length ? errors.join('\n') : '(기록 없음)'
-        ].join('\n');
-        const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'ao3-translation-failure-' + Date.now() + '.txt';
-        document.body.appendChild(link); link.click(); link.remove();
-        setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+        ].join('\n'));
+        const reportItem = {
+          id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9),
+          chapterTitle: String(chapterTitle || '(제목 없음)').slice(0, 180),
+          createdAt: Date.now(), attempts: 0, report: report
+        };
+        const pending = loadPendingTranslationFailureReports();
+        pending.push(reportItem);
+        savePendingTranslationFailureReports(pending);
+        if (isDriveTokenValid()) flushPendingTranslationFailureReports();
+        return reportItem;
+      }
+
+      function scheduleTranslationFailureReportRetry(attempts) {
+        if (translationFailureReportFlushTimer) clearTimeout(translationFailureReportFlushTimer);
+        const delay = Math.min(30 * 60 * 1000, 15000 * Math.pow(2, Math.min(6, Math.max(0, Number(attempts || 0)))));
+        translationFailureReportFlushTimer = setTimeout(function() {
+          translationFailureReportFlushTimer = null;
+          flushPendingTranslationFailureReports();
+        }, delay);
+      }
+
+      async function uploadTranslationFailureReportToDrive(reportItem) {
+        if (!isDriveTokenValid()) throw new Error('Google Drive is not connected.');
+        const folderId = await ensureDriveFailureReportsFolder();
+        const fileName = 'ao3-translation-failure-' + reportItem.id + '.txt';
+        const query = "'" + folderId + "' in parents and name = '" + fileName + "' and trashed = false";
+        const findResponse = await driveApiFetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) + '&fields=files(id,name)');
+        if (!findResponse.ok) throw new Error('Drive report lookup failed (HTTP ' + findResponse.status + ').');
+        const existingFiles = (await findResponse.json()).files || [];
+        if (existingFiles.length) return existingFiles[0].id;
+
+        const boundary = '-------ao3failure' + reportItem.id.replace(/[^a-z0-9]/gi, '');
+        const metadata = { name: fileName, mimeType: 'text/plain', parents: [folderId] };
+        const body = '--' + boundary + '\r\n' +
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) + '\r\n' +
+          '--' + boundary + '\r\n' +
+          'Content-Type: text/plain; charset=UTF-8\r\n\r\n' + reportItem.report + '\r\n' +
+          '--' + boundary + '--';
+        const response = await driveApiFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+          method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: body
+        });
+        if (!response.ok) throw new Error('Drive report upload failed (HTTP ' + response.status + ').');
+        const uploaded = await response.json();
+        if (!uploaded || !uploaded.id) throw new Error('Drive did not return an uploaded report ID.');
+        return uploaded.id;
+      }
+
+      async function flushPendingTranslationFailureReports() {
+        if (!isDriveTokenValid() || translationFailureReportFlushBusy) return 0;
+        if (translationFailureReportFlushTimer) {
+          clearTimeout(translationFailureReportFlushTimer);
+          translationFailureReportFlushTimer = null;
+        }
+        translationFailureReportFlushBusy = true;
+        let uploadedCount = 0;
+        try {
+          const pending = loadPendingTranslationFailureReports();
+          for (let index = 0; index < pending.length; index++) {
+            try {
+              await uploadTranslationFailureReportToDrive(pending[index]);
+              pending.splice(index, 1);
+              index--;
+              uploadedCount++;
+              savePendingTranslationFailureReports(pending);
+            } catch (error) {
+              pending[index].attempts = Number(pending[index].attempts || 0) + 1;
+              pending[index].lastUploadError = String(error && error.message || error).slice(0, 180);
+              savePendingTranslationFailureReports(pending);
+              if (isDriveTokenValid()) scheduleTranslationFailureReportRetry(pending[index].attempts);
+              break;
+            }
+          }
+        } finally {
+          translationFailureReportFlushBusy = false;
+        }
+        return uploadedCount;
       }
 
       function shouldRetryTranslationRound(error) {
@@ -4398,8 +4527,8 @@
           statusText.textContent = '번역 실패 · 원문을 번역문으로 저장하지 않았습니다.';
           setTranslationProviderStatus(window._ao3LastTranslationProvider || 'API', '실패');
           recordTranslationProviderError('번역 중단', err && err.message ? err.message : err);
-          downloadTranslationFailureReport(ch.title, err);
-          showToast('API 공급자 순환 ' + Number(err && err.translationRoundsUsed || 1) + '회 후 번역을 중단했습니다. 실패 보고서를 다운로드하고 진행 창에 오류를 표시했습니다.', 'warning');
+          reportTranslationFailureToDrive(ch.title, err);
+          showToast('API 공급자 순환 ' + Number(err && err.translationRoundsUsed || 1) + '회 후 번역을 중단했습니다. ' + (isDriveTokenValid() ? '실패 리포트를 Google Drive에 자동 업로드합니다.' : '실패 리포트는 보관되며 Google Drive 연결 시 자동 업로드합니다.'), 'warning');
         }
       }
 
@@ -4446,9 +4575,9 @@
           } catch (err) {
             statusText.textContent = '챕터 ' + (i + 1) + ' 번역 실패 · 이후 챕터는 중단됨';
             recordTranslationProviderError('챕터 ' + (i + 1), err && err.message ? err.message : err);
-            downloadTranslationFailureReport(ch.title, err);
+            reportTranslationFailureToDrive(ch.title, err);
             setTranslationProviderStatus(window._ao3LastTranslationProvider || 'API', '실패');
-            showToast('API 공급자 순환 ' + Number(err && err.translationRoundsUsed || 1) + '회 후 번역을 중단했습니다. 실패 보고서를 다운로드하고 진행 창에 오류를 표시했습니다.', 'warning');
+            showToast('API 공급자 순환 ' + Number(err && err.translationRoundsUsed || 1) + '회 후 번역을 중단했습니다. ' + (isDriveTokenValid() ? '실패 리포트를 Google Drive에 자동 업로드합니다.' : '실패 리포트는 보관되며 Google Drive 연결 시 자동 업로드합니다.'), 'warning');
             return false;
           }
         }
