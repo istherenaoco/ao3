@@ -449,7 +449,7 @@
 
       function ao3FunctionUrl(name) {
         const safeName = String(name || '').replace(/^\/+|\/+$/g, '');
-        const allowed = ['groq-translate', 'azure-translate', 'workers-ai-translate', 'status'];
+        const allowed = ['groq-translate', 'azure-translate', 'workers-ai-translate', 'status', 'ao3-fetch'];
         if (allowed.indexOf(safeName) === -1) throw new Error('Unknown API route.');
         return '/api/' + safeName;
       }
@@ -2259,6 +2259,7 @@
         clone.querySelectorAll('h3.landmark.heading, script, style, .landmark, #preface, .meta').forEach(function(el) {
           el.remove();
         });
+        clone.querySelectorAll('nav, .actions, #feedback, .comments, .comment').forEach(function(el) { el.remove(); });
 
         clone.querySelectorAll('br').forEach(function(br) {
           br.replaceWith('\n');
@@ -2319,25 +2320,25 @@
           return { meta: {}, chapters: [], reason: 'empty' };
         }
 
-        // Detect Cloudflare challenge or AO3 lock/interstitial pages early
+        // Detect Cloudflare challenge and AO3 access interstitials before extracting metadata.
         if (
-          htmlText.includes('Just a moment...') ||
-          htmlText.includes('cf-browser-verification') ||
-          htmlText.includes('Attention Required! | Cloudflare') ||
-          htmlText.includes('_cf_chl_opt')
+          /just a moment\.\.\.|cf-browser-verification|attention required!\s*\|\s*cloudflare|_cf_chl_opt|cf-chl-/i.test(htmlText)
         ) {
           return { meta: {}, chapters: [], reason: 'cloudflare' };
         }
 
-        if (
-          htmlText.includes('This work is only available to registered users of the Archive') ||
-          htmlText.includes('new_user_session') && !htmlText.includes('workskin') && !htmlText.includes('id="chapters"')
-        ) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+        const pageText = String(doc.body && doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+        if (/this work is only available to registered users of the archive/i.test(pageText) ||
+          (/new_user_session/i.test(htmlText) && !doc.querySelector('#workskin, #chapters, .userstuff'))) {
           return { meta: {}, chapters: [], reason: 'locked' };
         }
 
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlText, 'text/html');
+        const adultWarning = doc.querySelector('#adult_warning, #adult-warning, .adult-warning') ||
+          (/this work could have adult content|this work may contain adult content/i.test(pageText) &&
+            /yes\s*,?\s*continue|if you continue,? you have agreed/i.test(pageText));
+        if (adultWarning) return { meta: {}, chapters: [], reason: 'adult_gate' };
 
         // Read each metadata field only from its own AO3 metadata region. Never infer
         // author/fandom by splitting <title>: AO3 lets users customize that order.
@@ -2478,12 +2479,17 @@
 
         // Layout 3: Single chapter work web view fallback
         if (extractedChapters.length === 0) {
-          const singleArticle =
+        const singleArticle =
+            doc.querySelector('#chapters.userstuff[role="article"]') ||
+            doc.querySelector('#chapters.userstuff') ||
+            doc.querySelector('#workskin.userstuff[role="article"]') ||
+            doc.querySelector('#workskin.userstuff') ||
             doc.querySelector('#chapters div.userstuff[role="article"]') ||
             doc.querySelector('#chapters div.userstuff') ||
             doc.querySelector('#workskin div.userstuff[role="article"]') ||
             doc.querySelector('#workskin .userstuff') ||
-            doc.querySelector('div.userstuff[role="article"]');
+            doc.querySelector('div.userstuff[role="article"]') ||
+            doc.querySelector('#chapters');
           if (singleArticle) {
             const paragraphs = extractParagraphsFromElement(singleArticle);
             if (paragraphs.length > 0) {
@@ -2494,11 +2500,6 @@
               });
             }
           }
-        }
-
-        // Check if it was an Adult Content Warning page
-        if (extractedChapters.length === 0 && (htmlText.includes('This work could have adult content') || htmlText.includes('view_adult=true'))) {
-          return { meta: extractedMeta, chapters: [], reason: 'adult_gate' };
         }
 
         return { meta: extractedMeta, chapters: extractedChapters, reason: extractedChapters.length > 0 ? 'ok' : 'no_content' };
@@ -2612,48 +2613,57 @@
 
       // Extract AO3 workId and build candidate URLs (Download HTML endpoint + Web view URL)
       function extractAo3WorkInfo(rawUrl, fullWork) {
-        let u = rawUrl.trim();
-        if (!u) return null;
-        if (!/^https?:\/\//i.test(u)) {
-          u = 'https://' + u;
-        }
-        const workMatch = u.match(/\/works\/(\d+)/);
-        const chapterMatch = u.match(/\/chapters\/(\d+)/);
-        const workId = workMatch ? workMatch[1] : null;
-        const chapterId = chapterMatch ? chapterMatch[1] : null;
-
-        let webUrl = u;
+        const originalUrl = String(rawUrl || '').trim();
+        if (!originalUrl) return null;
+        let parsed;
         try {
-          const parsed = new URL(u);
-          if (parsed.hostname.endsWith('ao3.org')) {
-            parsed.hostname = 'archiveofourown.org';
-          }
-          parsed.searchParams.set('view_adult', 'true');
-          if (fullWork && workId) {
-            parsed.pathname = '/works/' + workId;
-            parsed.searchParams.set('view_full_work', 'true');
-          } else {
-            // Never let a pasted query parameter turn a single-chapter import into a full-work fetch.
-            parsed.searchParams.delete('view_full_work');
-          }
-          webUrl = parsed.toString();
-        } catch (e) {
-          // Keep original
+          parsed = new URL(/^https?:\/\//i.test(originalUrl) ? originalUrl : 'https://' + originalUrl);
+        } catch (e) { return null; }
+        const host = parsed.hostname.toLowerCase();
+        const allowedHosts = ['archiveofourown.org', 'www.archiveofourown.org', 'secure.archiveofourown.org', 'ao3.org', 'www.ao3.org', 'secure.ao3.org'];
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+        if (allowedHosts.indexOf(host) === -1) return null;
+        parsed.protocol = 'https:';
+        const routeMatch = parsed.pathname.match(/(?:^|\/)(?:collections\/[^/]+\/)?works\/(\d+)(?:\/chapters\/(\d+))?\/?$/i);
+        if (!routeMatch) return null;
+        const workId = routeMatch[1];
+        const chapterId = routeMatch[2] || null;
+        parsed.hostname = 'archiveofourown.org';
+        parsed.pathname = '/works/' + workId + (chapterId ? '/chapters/' + chapterId : '');
+        parsed.hash = '';
+        parsed.search = '';
+        parsed.searchParams.set('view_adult', 'true');
+        if (fullWork && workId) {
+          parsed.pathname = '/works/' + workId;
+          parsed.searchParams.set('view_full_work', 'true');
         }
+        const webUrl = parsed.toString();
 
-        // AO3 official static HTML download URL (bypasses adult warning screen and contains full work)
+        // Preserve the adult-content acceptance parameter for AO3's alternate download view too.
         const downloadHtmlUrl = workId
-          ? ('https://archiveofourown.org/downloads/' + workId + '/work.html')
+          ? ('https://archiveofourown.org/downloads/' + workId + '/work.html?view_adult=true')
           : null;
 
         return {
-          originalUrl: rawUrl.trim(),
+          originalUrl: originalUrl,
           workId: workId,
           chapterId: chapterId,
           fullWork: Boolean(fullWork),
           webUrl: webUrl,
           downloadHtmlUrl: downloadHtmlUrl
         };
+      }
+
+      function fetchAo3ThroughWorker(targetUrl, signal) {
+        const endpoint = ao3FunctionUrl('ao3-fetch') + '?url=' + encodeURIComponent(targetUrl);
+        return fetch(endpoint, { headers: { 'Accept': 'text/html,application/xhtml+xml' }, signal: signal })
+          .then(async function(response) {
+            if (!response.ok) {
+              const detail = await response.text().catch(function() { return ''; });
+              throw new Error('Cloudflare Worker AO3 HTTP ' + response.status + (detail ? ': ' + detail.slice(0, 240) : ''));
+            }
+            return response.text();
+          });
       }
 
       async function fetchWithTimeout(url, options, timeoutMs) {
@@ -2710,7 +2720,7 @@
               if (logFn) logFn('본문 확인 완료');
               return parsed;
             }
-            throw new Error(parsed.reason || 'no_content');
+            throw new Error(engineName + ': ' + (parsed.reason || 'no_content'));
           } catch (err) {
             tracker.done();
             throw err;
@@ -2741,6 +2751,7 @@
 
         // Build parallel race tasks for the requested page.
         const raceTasks = [
+          tryHtmlTask('Cloudflare Worker 직접 AO3', primaryUrl, fetchAo3ThroughWorker),
           tryHtmlTask('AllOrigins Raw', primaryUrl, async function(u, sig) {
             const r = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(u), { signal: sig });
             if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2779,6 +2790,7 @@
           const fullWorkUrl = fullWorkInfo && fullWorkInfo.webUrl;
           if (fullWorkUrl && fullWorkUrl !== primaryUrl) {
             raceTasks.push(
+              tryHtmlTask('Cloudflare Worker 전체 보기', fullWorkUrl, fetchAo3ThroughWorker),
               tryHtmlTask('전체 보기 AllOrigins Raw', fullWorkUrl, async function(u, sig) {
                 const r = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(u), { signal: sig });
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2792,6 +2804,7 @@
           // succeed when the web-view HTML omits the actual chapter body.
           if (info.downloadHtmlUrl) {
             raceTasks.push(
+              tryHtmlTask('Cloudflare Worker 다운로드 HTML', info.downloadHtmlUrl, fetchAo3ThroughWorker),
               tryHtmlTask('다운로드 HTML AllOrigins', info.downloadHtmlUrl, async function(u, sig) {
                 const r = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(u), { signal: sig });
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -5937,6 +5950,11 @@
           const target = info.webUrl;
           const candidates = [
             {
+              name: 'Cloudflare Worker 직접 AO3',
+              url: ao3FunctionUrl('ao3-fetch') + '?url=' + encodeURIComponent(target),
+              read: async function(response) { return { text: await response.text(), type: 'html' }; }
+            },
+            {
               name: 'AllOrigins Raw',
               url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target),
               read: async function(response) { return { text: await response.text(), type: 'html' }; }
@@ -6135,8 +6153,8 @@
             ? urlOverride.trim()
             : document.getElementById('ao3UrlInput').value.trim();
           if (!currentUrl) throw new Error('AO3 챕터 링크를 입력해 주세요.');
-          if (!/^https?:\/\/(?:www\.)?(?:archiveofourown|ao3)\.org\/works\/\d+(?:\/chapters\/\d+)?(?:[/?#]|$)/i.test(currentUrl)) {
-            throw new Error('AO3 작품 링크(/works/번호) 또는 챕터 링크(/works/번호/chapters/번호)를 입력해 주세요.');
+          if (!extractAo3WorkInfo(currentUrl, false)) {
+            throw new Error('archiveofourown.org 작품 링크(/works/번호), 챕터 링크 또는 컬렉션 안의 작품 링크를 입력해 주세요.');
           }
 
           const btn = document.getElementById('fetchAo3UrlBtn');
@@ -6181,6 +6199,15 @@
             }
             const detail = err && err.message ? err.message : String(err || '알 수 없는 오류');
             appendFetchLog('본문을 가져오지 못했습니다: ' + detail);
+            if (/adult_gate/i.test(detail)) {
+              throw new Error('AO3 성인 콘텐츠 경고 화면만 반환되었습니다. Worker가 view_adult 동의 경로와 다운로드 경로를 다시 시도했지만 본문을 받지 못했습니다. AO3에서 작품을 직접 열어 성인 콘텐츠 안내가 해제되는지 확인해 주세요.');
+            }
+            if (/\blocked\b|registered users/i.test(detail)) {
+              throw new Error('AO3가 이 작품을 로그인 사용자에게만 공개하고 있습니다. 로그인 전용 작품은 자동으로 가져올 수 없습니다.');
+            }
+            if (/\bcloudflare\b|cf-chl|Just a moment/i.test(detail)) {
+              throw new Error('AO3 또는 프록시가 Cloudflare 확인 페이지를 반환했습니다. 잠시 후 다시 시도하거나 본문을 복사해 붙여넣어 주세요.');
+            }
             if (/ALL_PROXIES_BLOCKED/i.test(detail)) {
               throw new Error('AO3 본문 추출 경로가 응답하지 않았습니다. 잠시 후 다시 시도하거나 AO3에서 본문을 복사해 붙여넣어 주세요. (' + detail.replace(/^ALL_PROXIES_BLOCKED:\s*/i, '') + ')');
             }
@@ -6255,8 +6282,8 @@
           const input = document.getElementById('ao3UrlInput');
           const url = input.value.trim();
           if (!url) { showToast('AO3 챕터 링크를 입력해 주세요.', 'warning'); return; }
-          if (!/^https?:\/\/(?:www\.)?(?:archiveofourown|ao3)\.org\/works\/\d+(?:\/chapters\/\d+)?(?:[/?#]|$)/i.test(url)) {
-            showToast('AO3 작품 링크(/works/번호) 또는 챕터 링크(/works/번호/chapters/번호)를 입력해 주세요.', 'warning'); return;
+          if (!extractAo3WorkInfo(url, false)) {
+            showToast('archiveofourown.org 작품 링크(/works/번호), 챕터 링크 또는 컬렉션 안의 작품 링크를 입력해 주세요.', 'warning'); return;
           }
           const normalizedUrl = normalizeAo3QueueUrl(url);
           const activeUrl = normalizeAo3QueueUrl(window._ao3ActiveLinkUrl);

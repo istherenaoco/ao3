@@ -9,6 +9,8 @@
 ## 번역 엔진
 번역 공급자 우선순위는 Gemini → Cloudflare Workers AI → Groq → Azure Translator입니다. 공급자 체인을 최대 2회 순환한 뒤에도 실패하면 작업을 중단하고 오류 알림과 다운로드 가능한 실패 보고서를 제공합니다. Google 번역 fallback은 사용하지 않습니다. 잘못되거나 비어 있는 번역 결과는 저장하지 않습니다.
 
+AO3 본문 가져오기는 같은 Worker의 `/api/ao3-fetch` 경로를 먼저 사용하고, 실패 시 AllOrigins·CodeTabs·Jina Reader 경로를 보조로 시도합니다. Worker는 AO3 HTTPS 작품/챕터 URL만 허용하고 fragment(`#workskin`)를 제거하며, 성인 콘텐츠 동의 URL과 다운로드 HTML 경로를 함께 사용합니다. 로그인 전용 작품이나 AO3/Cloudflare 확인 화면은 우회하지 않고 명확한 오류로 표시합니다.
+
 Workers AI를 사용하려면 `wrangler.jsonc`의 `"ai": { "binding": "AI" }` 설정을 유지하고 배포한 뒤 앱 설정의 Workers AI 연결 테스트를 실행하세요. 별도의 Workers AI API 키를 앱에 입력할 필요는 없습니다.
 
 ## Secret 설정

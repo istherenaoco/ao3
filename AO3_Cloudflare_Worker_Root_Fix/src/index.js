@@ -4,6 +4,10 @@ const MAX_GROQ_BATCH_CHARS = 10000;
 const MAX_AZURE_BATCH_CHARS = 50000;
 const MAX_WORKERS_AI_BATCH_CHARS = 12000;
 const WORKERS_AI_MODELS = new Set(['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b']);
+const AO3_HOSTS = new Set([
+  'archiveofourown.org', 'www.archiveofourown.org', 'secure.archiveofourown.org',
+  'ao3.org', 'www.ao3.org', 'secure.ao3.org'
+]);
 
 // OpenAI-compatible APIs may return content as a string, an array of text blocks,
 // or null when a reasoning model exhausts its completion budget before final output.
@@ -24,6 +28,7 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: jsonHeaders(request) });
       if (url.pathname === '/api/status') return handleStatus(request, env);
+      if (url.pathname === '/api/ao3-fetch') return handleAo3Fetch(request);
       if (url.pathname === '/api/groq-translate') return handleGroq(request, env);
       if (url.pathname === '/api/azure-translate') return handleAzure(request, env);
       if (url.pathname === '/api/workers-ai-translate') return handleWorkersAI(request, env);
@@ -66,6 +71,80 @@ function handleStatus(request, env) {
       workersAI: Boolean(env.AI && typeof env.AI.run === 'function')
     }
   }, 200, { ...jsonHeaders(request), 'Cache-Control': 'no-store' });
+}
+
+function normalizeAo3FetchTarget(rawUrl, allowAnyAo3Path = false) {
+  let target;
+  try { target = new URL(String(rawUrl || '')); }
+  catch (error) { throw new Error('AO3 URL이 올바르지 않습니다.'); }
+  if (target.protocol !== 'https:' || !AO3_HOSTS.has(target.hostname.toLowerCase())) {
+    throw new Error('archiveofourown.org의 HTTPS 링크만 가져올 수 있습니다.');
+  }
+  const workPath = /^(?:\/collections\/[^/]+)?\/works\/\d+(?:\/chapters\/\d+)?\/?$/i.test(target.pathname);
+  const downloadPath = /^\/downloads\/\d+\/work\.html$/i.test(target.pathname);
+  if (!allowAnyAo3Path && !workPath && !downloadPath) {
+    throw new Error('AO3 작품 또는 챕터 URL만 가져올 수 있습니다.');
+  }
+  target.hostname = 'archiveofourown.org';
+  target.username = '';
+  target.password = '';
+  target.hash = '';
+  const requestedFullWork = target.searchParams.get('view_full_work') === 'true';
+  target.search = '';
+  target.searchParams.set('view_adult', 'true');
+  if (requestedFullWork) target.searchParams.set('view_full_work', 'true');
+  return target;
+}
+
+async function handleAo3Fetch(request) {
+  if (request.method !== 'GET') return jsonResponse(request, { error: 'Method Not Allowed' }, 405);
+  let target;
+  try {
+    target = normalizeAo3FetchTarget(new URL(request.url).searchParams.get('url'));
+  } catch (error) {
+    return jsonResponse(request, { error: error.message || 'AO3 URL validation failed' }, 400);
+  }
+
+  try {
+    let upstream = null;
+    for (let redirectCount = 0; redirectCount <= 3; redirectCount++) {
+      upstream = await fetch(target.toString(), {
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          // The user explicitly submitted a work URL. Carry the same adult-content
+          // acceptance represented by AO3's view_adult=true URL parameter.
+          'Cookie': 'view_adult=true; accepted_tos=20180523'
+        },
+        signal: request.signal,
+        redirect: 'manual'
+      });
+      if (![301, 302, 303, 307, 308].includes(upstream.status)) break;
+      const location = upstream.headers.get('location');
+      if (!location || redirectCount === 3) {
+        if (upstream.body) await upstream.body.cancel();
+        return jsonResponse(request, { error: 'AO3 returned an unsupported redirect.' }, 502);
+      }
+      const next = new URL(location, target);
+      if (next.protocol !== 'https:' || !AO3_HOSTS.has(next.hostname.toLowerCase())) {
+        if (upstream.body) await upstream.body.cancel();
+        return jsonResponse(request, { error: 'AO3 redirected outside the allowed AO3 domains.' }, 502);
+      }
+      if (upstream.body) await upstream.body.cancel();
+      target = normalizeAo3FetchTarget(next.toString(), true);
+    }
+    if (!upstream) return jsonResponse(request, { error: 'AO3 returned no response.' }, 502);
+    const headers = new Headers({
+      'Content-Type': upstream.headers.get('content-type') || 'text/html; charset=UTF-8',
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': new URL(request.url).origin,
+      'Access-Control-Expose-Headers': 'Content-Type',
+      'Vary': 'Origin'
+    });
+    return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers });
+  } catch (error) {
+    return jsonResponse(request, { error: 'AO3 request failed', message: String(error?.message || error).slice(0, 500) }, 502);
+  }
 }
 
 async function handleGroq(request, env) {
