@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '91';
+      window.__AO3_BUILD_VERSION__ = '92';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -2077,8 +2077,10 @@
         document.querySelectorAll('.nav-tab-btn').forEach(function(btn) {
           const target = btn.getAttribute('data-view');
           if (target === viewName) {
+            btn.setAttribute('aria-current', 'page');
             btn.className = 'nav-tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 bg-white text-slate-900 shadow-sm';
           } else {
+            btn.removeAttribute('aria-current');
             btn.className = 'nav-tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900';
           }
         });
@@ -7553,7 +7555,6 @@
             if (quotaModal && !quotaModal.classList.contains('hidden')) ao3RefreshProviderQuotaDashboard();
           }
         });
-        document.addEventListener('visibilitychange', function() { if (!document.hidden) { const modal = document.getElementById('apiSettingsModal'); if (modal && !modal.classList.contains('hidden')) ao3RefreshProviderQuotaDashboard(); } });
         document.getElementById('resetDefaultPromptBtn').addEventListener('click', function() {
           document.getElementById('translationPromptTextarea').value = DEFAULT_TRANSLATION_PROMPT;
           showToast('기본 소설 번역 프롬프트가 복원되었습니다.');
