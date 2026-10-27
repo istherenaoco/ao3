@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col selection:bg-rose-100 selection:text-rose-900">
-  <!-- AO3_BUILD=ao3-bookshelf-ui-v98.0 -->
+  <!-- AO3_BUILD=ao3-bookshelf-ui-v99.0 -->
 <!-- Top Navigation Header -->
   <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
@@ -917,7 +917,7 @@
           <p class="text-[11px] text-rose-900/80 leading-relaxed">
             * 아래 지정된 <strong>소설 번역 프롬프트</strong>를 시스템 지시문(System Instruction)으로 엄격히 준수하여 번역합니다.
           </p>
-          <p class="text-[11px] text-rose-900/80 leading-relaxed">Google 응답이 503 UNAVAILABLE 또는 “experiencing high demand”이면 해당 모델을 30초부터 최대 2분까지 임시 냉각하고 다른 지원 Gemini 모델로 현재 문단을 재시도합니다. 냉각이 끝나면 선택 모델을 다시 우선 사용합니다.</p>
+          <p class="text-[11px] text-rose-900/80 leading-relaxed">Google 응답이 503 UNAVAILABLE 또는 “experiencing high demand”이면 해당 모델을 5분부터 반복 과부하 시 점차 늘려 최대 1시간까지 냉각하고 다른 지원 Gemini 모델로 현재 문단을 재시도합니다. 냉각이 끝나면 선택 모델을 다시 우선 사용합니다.</p>
         </div>
 
         <!-- Cloudflare Workers AI: uses the Worker AI binding, no client API key needed -->

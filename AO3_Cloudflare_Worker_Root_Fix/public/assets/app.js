@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '98';
+      window.__AO3_BUILD_VERSION__ = '99';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -399,7 +399,7 @@
         const health = ao3GetGeminiModelHealthStore();
         const previous = health[model] || {};
         const failures = Math.min(8, Number(previous.overloadFailures || 0) + 1);
-        const fallbackMs = Math.min(2 * 60 * 1000, 30000 * Math.pow(2, failures - 1));
+        const fallbackMs = Math.min(60 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, failures - 1));
         const error = payload && payload.error || {};
         const retryHeader = headers && headers.get ? headers.get('Retry-After') : null;
         let retryMs = 0;
@@ -413,7 +413,7 @@
           const match = retryDetail && String(retryDetail.retryDelay).match(/([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)/i);
           if (match) retryMs = Number(match[1]) * ({ ms: 1, s: 1000, m: 60000, h: 3600000 }[match[2].toLowerCase()]);
         }
-        const cooldownMs = Math.max(15000, Math.min(retryMs || fallbackMs, 2 * 60 * 1000));
+        const cooldownMs = Math.max(fallbackMs, Math.min(retryMs, 60 * 60 * 1000));
         const entry = { until: Date.now() + cooldownMs, overloadFailures: failures, lastOverloadAt: Date.now(), reason: String(error.message || '').slice(0, 220) };
         health[model] = entry;
         ao3SaveGeminiModelHealthStore(health);
