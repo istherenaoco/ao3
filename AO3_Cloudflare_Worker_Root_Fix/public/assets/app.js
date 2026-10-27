@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '90';
+      window.__AO3_BUILD_VERSION__ = '91';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -34,7 +34,7 @@
       const IDB_STORE = 'novels_store';
 
       // One source of truth for the default literary translation prompt.
-      const DEFAULT_TRANSLATION_PROMPT = '한국어로 번역한다. 목표는 요약이나 기계적 직역이 아니라 출판 가능한 자연스러운 한국어 장편소설 문장이다. [서술 문체] 대사와 생각이 직접 인용된 부분을 제외한 일반 서술은 일관된 소설 문어체로 쓰고, 기본 종결은 과거형 -았다/-었다/-였다 및 필요한 연결형으로 유지한다. 서술문에 -해/-야/-거야/-했어요/-습니다 같은 구어체·대화체 종결을 섞지 않는다. 단, 인물의 실제 대사와 직접 인용된 내면 독백은 화자의 말투를 유지한다. 원문이 현재형이거나 의도적으로 단문을 반복할 때는 효과를 살리되, 문체를 기계적으로 통일하지 않는다. [한국어 재구성] 영어 어순과 수식어 순서를 그대로 따라가지 말고, 한국어에서 자연스러운 주어·목적어·수식어 순서로 문장을 다시 구성한다. 영어 관계절·분사구문·생략된 주어는 문맥에 맞게 풀어 쓰고, 문장 조각은 앞뒤 문장과 논리적으로 연결한다. 원문이 의도한 단문 리듬은 보존한다. [정확성] 모든 문장을 빠짐없이 번역하고 의미를 추가·삭제·완화하지 않는다. 관용구, 구동사, 신체·의학 용어, 성적 용어는 철자 유사성으로 추측하지 말고 문맥상 의미를 정확히 고른다. 인물의 성별·대명사·행위 주체·대상·시제·부정·인과관계를 유지한다. [문학성] 감정의 미묘함, 시점, 인물별 어휘와 말투, 반복과 리듬을 보존한다. 같은 표현을 문맥 없이 반복하지 말고, 한국어에서 어색한 명사화·피동·중복 주어·영어식 추상명사를 자연스럽게 고친다. [형식] 원문의 문단 순서와 문단 수, 장면 구분선을 유지한다. 대사는 따옴표 안에 두고 서술문과 대사의 말투 규칙을 혼동하지 않는다. 고유명사는 작품 내 통용 표기를 우선하고 지정 표기를 따른다. 원문에 있는 이탤릭은 강조 의미를 보존하되 마크다운 기호를 출력하지 않는다. 번역문만 출력하고 설명이나 주석을 붙이지 않는다. 출력 전 내부적으로 문장별 누락 여부, 한국어 어순, 조사, 용어, 서술 종결, 대사 말투를 검수하고 어색한 문장을 다시 쓴다.';
+      const DEFAULT_TRANSLATION_PROMPT = '한국어로 번역한다. 목표는 요약이나 기계적 직역이 아니라 출판 가능한 자연스러운 한국어 장편소설 문장이다. [서술 문체] 대사와 생각이 직접 인용된 부분을 제외한 일반 서술은 일관된 소설 문어체로 쓰고, 기본 종결은 과거형 -았다/-었다/-였다 및 필요한 연결형으로 유지한다. 서술문에 -해/-야/-거야/-했어요/-습니다 같은 구어체·대화체 종결을 섞지 않는다. 단, 인물의 실제 대사와 직접 인용된 내면 독백은 화자의 말투를 유지한다. 원문이 현재형이거나 의도적으로 단문을 반복할 때는 효과를 살리되, 문체를 기계적으로 통일하지 않는다. [한국어 재구성] 영어 어순과 수식어 순서를 그대로 따라가지 말고, 한국어에서 자연스러운 주어·목적어·수식어 순서로 문장을 다시 구성한다. 영어 관계절·분사구문·생략된 주어는 문맥에 맞게 자연스럽게 옮긴다. 원문 자체가 미완성한 문장 조각, 말줄임표·대시로 끊긴 말, 의도적 반복은 완성하거나 삭제하지 말고 그 호흡을 보존한다. 원문에서 완결된 문장은 의미를 빠짐없이 완결된 한국어로 번역한다. [정확성] 모든 문장을 빠짐없이 번역하고 의미를 추가·삭제·완화하지 않는다. 관용구, 구동사, 신체·의학 용어, 성적 용어는 철자 유사성으로 추측하지 말고 문맥상 의미를 정확히 고른다. 인물의 성별·대명사·행위 주체·대상·시제·부정·인과관계를 유지한다. [문학성] 감정의 미묘함, 시점, 인물별 어휘와 말투, 반복과 리듬을 보존한다. 같은 표현을 문맥 없이 반복하지 말고, 한국어에서 어색한 명사화·피동·중복 주어·영어식 추상명사를 자연스럽게 고친다. [형식] 원문의 문단 순서와 문단 수, 장면 구분선을 유지한다. 대사는 따옴표 안에 두고 서술문과 대사의 말투 규칙을 혼동하지 않는다. 고유명사는 작품 내 통용 표기를 우선하고 지정 표기를 따른다. 원문에 있는 이탤릭은 강조 의미를 보존하되 마크다운 기호를 출력하지 않는다. 번역문만 출력하고 설명이나 주석을 붙이지 않는다. 출력 전 내부적으로 문장별 누락 여부, 원문에 없는 미완성·누락 여부, 한국어 어순, 조사, 용어, 서술 종결, 대사 말투를 검수한다.';
 
       // Keep the selected model compatible with the current Gemini generateContent endpoint.
       // Gemini 4 Argon is intentionally not listed here: it is paid-only and uses the Interactions API.
@@ -3253,36 +3253,39 @@
         }).join('\n').trim();
       }
 
-      const AO3_COMMON_ENGLISH_RESIDUE = new Set((
-        'the and or but if then when where what who why how you your yourself yours only such time said says say with from that this these those have has had was were are is am be been being will would could should not dont dontve didnt doesnt isnt arent wasnt werent its im ive ill we they he she her his their them me my mine us for of to in on at as by into through just all still already because however although please really very much more most some any each every again about after before while than too also can cannot do does did done get got go went come came know think feel want need make made take took give gave tell told look see heard hear over under up down out off back away one two may might must shall whoa yeah okay ok fuck fucking shit damn no yes man woman girl boy' 
-      ).split(/\s+/));
+      const AO3_ENGLISH_FUNCTION_WORDS = new Set(('the and or but if then when where what who why how i you your with from that this these those have has had was were are is am be been being will would could should not dont didnt doesnt isnt arent wasnt werent for of to in on at as by into through because although while than can cannot do does did').split(/\s+/));
 
       function hasUntranslatedEnglishResidue(source, translated) {
         const clean = stripInlineTranslationMarkup(translated);
         if (!clean || /<<<P_SEP>>>|\[번역 대기\]|\[오프라인 원문\]/i.test(clean)) return true;
         const src = String(source || '').trim();
         if (isSceneDividerLine(src)) return !isSceneDividerLine(clean);
-        if (/[A-Za-z]/.test(src) && !/[가-힣]/.test(clean)) return true;
+        const sourceTail = src.replace(/[\"'”’)}\]]+$/g, '').trim();
+        const sourceIsDeliberatelyOpen = /(?:…|\.{2,}|—|–|--|[,;:]|\b(?:and|but|or|if|when|because|although|while|though|to|of|with|for|as|than))$/i.test(sourceTail);
+        const sourceHasTerminal = /[.!?][\"'”’)}\]]?$/.test(src) && !sourceIsDeliberatelyOpen;
+        if (/[A-Za-z]/.test(src) && !/[가-힣]/.test(clean) && sourceHasTerminal) {
+          const sourceWords = src.match(/\b[A-Za-z][A-Za-z'-]*\b/g) || [];
+          const sourceGrammarCount = sourceWords.filter(function(word) { return AO3_ENGLISH_FUNCTION_WORDS.has(word.toLowerCase().replace(/['’]/g, '')); }).length;
+          // Short titles, names, and deliberately open fragments are ambiguous;
+          // reject only complete English text with sentence-like structure.
+          if ((sourceWords.length >= 4 && sourceGrammarCount >= 1) || (sourceWords.length >= 3 && sourceGrammarCount >= 2)) return true;
+        }
 
-        const englishWords = clean.match(/\b[A-Za-z][A-Za-z'-]*\b/g) || [];
-        const residueWords = englishWords.map(function(word) { return word.toLowerCase().replace(/['’]/g, ''); })
-          .filter(function(word) { return AO3_COMMON_ENGLISH_RESIDUE.has(word); });
-        const uniqueResidue = Array.from(new Set(residueWords));
-        if (uniqueResidue.length >= 2 || residueWords.length >= 3) return true;
-
-        // A long run of Latin words inside Korean prose is usually an untranslated fragment.
+        // Preserve short phrases, names, and code switches. Only flag a Latin run when
+        // it has enough English grammar words to look like untranslated prose.
         const latinRuns = clean.match(/\b[A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*){2,}\b/g) || [];
         if (latinRuns.some(function(run) {
-          return run.split(/\s+/).some(function(word) {
-            return AO3_COMMON_ENGLISH_RESIDUE.has(word.toLowerCase().replace(/['’]/g, ''));
-          });
+          const words = run.toLowerCase().split(/\s+/).map(function(word) { return word.replace(/['’]/g, ''); });
+          const grammarCount = words.filter(function(word) { return AO3_ENGLISH_FUNCTION_WORDS.has(word); }).length;
+          return (words.length >= 6 && grammarCount >= 1) || (words.length >= 4 && grammarCount >= 2);
         })) return true;
 
-        // If the source ends a full sentence but the long translated sentence is left dangling,
-        // treat it as suspect so a fallback provider can translate the whole batch.
-        const sourceHasTerminal = /[.!?…][\"'”’)}\]]?$/.test(src);
+        // Punctuation alone cannot establish truncation: AO3 deliberately uses
+        // fragments, ellipses, and interrupted dialogue. Require a full source
+        // sentence plus a Korean ending that is grammatically left hanging.
         const translationHasTerminal = /[.!?。！？…][\"'”’)}\]]?$/.test(clean);
-        if (src.length > 80 && clean.length > 35 && sourceHasTerminal && !translationHasTerminal) return true;
+        const translationLooksDangling = /(?:은|는|이|가|을|를|의|에|에서|으로|로|와|과|에게|까지|부터|처럼|보다|며|고|지만|는데|려고|해서|때문에|그리고|그러나|하지만|그런데|그가|그녀가|그것을|그것은|나는|우리는)$/u.test(clean);
+        if (src.length > 80 && clean.length > 35 && sourceHasTerminal && !translationHasTerminal && translationLooksDangling) return true;
         if (src.length > 220 && clean.length < Math.max(40, src.length * 0.2)) return true;
         return false;
       }
@@ -3790,7 +3793,8 @@
           return stripInlineTranslationMarkup(s);
         });
 
-        const customPrompt = (state.settings.translationPrompt || DEFAULT_TRANSLATION_PROMPT).trim();
+        const customPrompt = ((state.settings.translationPrompt || DEFAULT_TRANSLATION_PROMPT).trim() +
+          '\n\n[원문 문장 완결성] 원문에서 의도한 문장 조각, 말줄임표, 대시로 끊긴 말, 반복은 창작적 선택으로 보고 임의로 완성하거나 삭제하지 않는다. 원문에서 완결된 문장은 내용을 빠짐없이 완결된 한국어로 옮긴다. 고유명사·짧은 인용·코드 스위칭은 문맥상 의도일 수 있으므로 영어 잔여로 단정하지 말고, 일반 영어 구절이나 완결된 문장만 누락 여부를 다시 확인한다.');
         const fandomHint = (contextMeta && contextMeta.fandom) ? ('\n[원작/장르 정보]: ' + contextMeta.fandom) : '';
         const prevContextHint = (contextMeta && contextMeta.prevContext) ? ('\n[직전 문단 맥락(참고용, 번역 출력 제외)]: ' + contextMeta.prevContext) : '';
         const characterStyleHint = String(state.settings.characterStyleRules || '').trim() ? '\n[추가 프롬프트]\n' + String(state.settings.characterStyleRules).trim() + '\n기본 번역 지침과 충돌하면 원문의 의미와 문맥을 우선하고, 추가 지침은 해당 문맥에 맞게 적용하세요.' : '';

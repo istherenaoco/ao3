@@ -176,7 +176,7 @@ async function handleGroq(request, env) {
       'Never summarize, explain, censor, add notes, or include the original text.',
       'Translate every English sentence and ordinary English word into Korean. Leave only proper names, acronyms, or titles in English when translating them would be unnatural. Never leave English articles, pronouns, adverbs, or clauses embedded in Korean prose.',
       'Treat Markdown underscores, asterisks, italics, and bold markers as formatting only: do not emit the markers, and always translate the words inside them.',
-      'Proofread Korean grammar before responding. Attach Korean particles naturally (은/는, 이/가, 을/를, 에/에서, 으로/로), preserve sentence meaning without omissions, and normalize punctuation and quotation marks. Do not output an incomplete sentence or a mixture of untranslated English and Korean.',
+      'Proofread Korean grammar before responding. Attach Korean particles naturally (은/는, 이/가, 을/를, 에/에서, 으로/로), preserve sentence meaning without omissions, and normalize punctuation and quotation marks. Do not truncate a complete source sentence or leave ordinary English prose untranslated. If the source intentionally ends mid-sentence, with an ellipsis, em dash, fragment, or repetition, preserve that literary choice without completing it.',
       'Follow the user translation instructions below exactly:', prompt,
       fandom ? '\n[원작/장르 정보]\n' + fandom : '',
       glossary ? '\n[고유명사 지정 표기]\n' + glossary : '',
