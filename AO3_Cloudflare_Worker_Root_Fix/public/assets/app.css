@@ -1571,3 +1571,116 @@ html[data-app-theme="dark"] #ao3FetchLogBox > div:first-child {
 html[data-app-theme="dark"] #ao3FetchLogBox #ao3FetchLogList,
 html[data-app-theme="dark"] #ao3FetchLogBox #ao3FetchLogList * { color: #e2e8f0 !important; }
 html[data-app-theme="dark"] #ao3FetchLogBox button { color: #a8b5c8 !important; }
+
+/* v81: fix the translation queues' inline navy/cyan colors in green mode.
+   The AO3 link queue renderer writes row borders and action-button backgrounds inline,
+   so the theme must explicitly override those properties with !important. */
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList > li {
+  border-top: 1px solid #c0d3c4 !important;
+}
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList li button {
+  background: #d5e6d8 !important;
+  color: #294735 !important;
+  border-color: #91b09a !important;
+}
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList li button:hover {
+  background: #c5ddca !important;
+  border-color: #6f9579 !important;
+}
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList li > div:first-child > div:nth-child(2) {
+  color: #3f5b47 !important;
+  opacity: 1 !important;
+}
+html[data-app-theme="green"] #ao3LinkQueueBox #ao3LinkQueueList li > div:first-child > div:nth-child(3) {
+  color: #496451 !important;
+  opacity: 1 !important;
+}
+html[data-app-theme="green"] #ao3LinkQueueBox #clearAo3LinkQueueBtn {
+  color: #294735 !important;
+}
+
+/* The manual chapter-translation queue is a separate component from the AO3 link queue.
+   Keep its cards, count badge, and translated/untranslated labels in the same green palette. */
+html[data-app-theme="green"] #studioAdvancedDetails [class~="bg-slate-50/60"] {
+  background-color: #edf5ee !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #studioChapterCountBadge {
+  background-color: #d5e6d8 !important;
+  color: #294735 !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="bg-emerald-50"] {
+  background-color: #d5e6d8 !important;
+  color: #294735 !important;
+  border-color: #a3bdaa !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="text-emerald-700"] {
+  color: #294735 !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="border-emerald-200"] {
+  border-color: #a3bdaa !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="bg-amber-50"] {
+  background-color: #f3ecd8 !important;
+  color: #5c4c2d !important;
+  border-color: #d7c89e !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="text-amber-800"] {
+  color: #5c4c2d !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="border-amber-200"] {
+  border-color: #d7c89e !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="text-slate-600"],
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="text-slate-500"],
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="text-slate-400"] {
+  color: #496451 !important;
+}
+html[data-app-theme="green"] #studioAdvancedDetails #draftChaptersContainer [class~="border-slate-200"] {
+  border-color: #a3bdaa !important;
+}
+
+
+
+/* v82: reader display/settings drawer must use the green app theme too.
+   Keep the drawer and every control surface readable even when utility classes
+   or inline styles from the reader controls would otherwise leave white/navy UI. */
+html[data-app-theme="green"] #readerDisplayDrawer,
+html[data-app-theme="green"] #readerControlsBar {
+  background: #e7f0e8 !important;
+  color: #20382a !important;
+  border-color: #9db9a4 !important;
+}
+html[data-app-theme="green"] #readerDisplayDrawer h1,
+html[data-app-theme="green"] #readerDisplayDrawer h2,
+html[data-app-theme="green"] #readerDisplayDrawer h3,
+html[data-app-theme="green"] #readerDisplayDrawer label,
+html[data-app-theme="green"] #readerDisplayDrawer p,
+html[data-app-theme="green"] #readerDisplayDrawer span,
+html[data-app-theme="green"] #readerDisplayDrawer small,
+html[data-app-theme="green"] #readerDisplayDrawer button,
+html[data-app-theme="green"] #readerControlsBar button {
+  color: #294735 !important;
+}
+html[data-app-theme="green"] #readerDisplayDrawer button,
+html[data-app-theme="green"] #readerDisplayDrawer [role="button"],
+html[data-app-theme="green"] #readerControlsBar button {
+  background-color: #d5e6d8 !important;
+  border-color: #a3bdaa !important;
+}
+html[data-app-theme="green"] #readerDisplayDrawer button:hover,
+html[data-app-theme="green"] #readerDisplayDrawer [role="button"]:hover,
+html[data-app-theme="green"] #readerControlsBar button:hover {
+  background-color: #c5ddca !important;
+  border-color: #6f9579 !important;
+}
+html[data-app-theme="green"] #readerDisplayDrawer input:not([type="checkbox"]):not([type="radio"]),
+html[data-app-theme="green"] #readerDisplayDrawer select,
+html[data-app-theme="green"] #readerDisplayDrawer textarea {
+  background-color: #f7faf7 !important;
+  color: #20382a !important;
+  border-color: #9db9a4 !important;
+}
+html[data-app-theme="green"] #readerDisplayDrawer input[type="checkbox"],
+html[data-app-theme="green"] #readerDisplayDrawer input[type="radio"] {
+  accent-color: #477653 !important;
+}

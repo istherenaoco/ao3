@@ -589,7 +589,7 @@
             if (typeof state.settings.groqEnabled !== 'boolean') state.settings.groqEnabled = true;
             if (typeof state.settings.workersAiEnabled !== 'boolean') state.settings.workersAiEnabled = true;
             if (!['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b'].includes(state.settings.workersAiModel)) state.settings.workersAiModel = '@cf/zai-org/glm-4.7-flash';
-            if (state.settings.engine !== 'free_gtx') state.settings.engine = 'gemini_api';
+            state.settings.engine = 'gemini_api';
             delete state.settings.deeplApiKey;
             delete state.settings.mistralApiKey;
             delete state.settings.mistralModel;
@@ -1044,7 +1044,7 @@
         const stringKeys = ['engine', 'geminiModel', 'azureRegion', 'groqModel', 'workersAiModel', 'translationPrompt', 'glossary', 'textReplacements', 'characterStyleRules', 'googleClientId'];
         stringKeys.forEach(function(key) { if (typeof rs[key] === 'string') state.settings[key] = rs[key]; });
         ['groqEnabled', 'workersAiEnabled'].forEach(function(key) { if (typeof rs[key] === 'boolean') state.settings[key] = rs[key]; });
-        if (state.settings.engine !== 'free_gtx') state.settings.engine = 'gemini_api';
+        state.settings.engine = 'gemini_api';
         state.settings.geminiModel = normalizeGeminiModel(state.settings.geminiModel);
         if (!state.settings.groqModel || state.settings.groqModel === 'llama-3.3-70b-versatile') state.settings.groqModel = 'openai/gpt-oss-120b';
         if (!['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b'].includes(state.settings.workersAiModel)) state.settings.workersAiModel = '@cf/zai-org/glm-4.7-flash';
@@ -1372,7 +1372,7 @@
         if (!state.settings.geminiApiKeys && state.settings.geminiApiKey) state.settings.geminiApiKeys = state.settings.geminiApiKey;
         state.settings.geminiModel = normalizeGeminiModel(state.settings.geminiModel);
         if (state.settings.groqModel === 'llama-3.3-70b-versatile') state.settings.groqModel = 'openai/gpt-oss-120b';
-        if (state.settings.engine !== 'free_gtx') state.settings.engine = 'gemini_api';
+        state.settings.engine = 'gemini_api';
         delete state.settings.deeplApiKey;
         delete state.settings.mistralApiKey;
         delete state.settings.mistralModel;
@@ -3345,8 +3345,6 @@
           pill.classList.add('bg-violet-50', 'border-violet-200', 'text-violet-800'); dotClass = 'bg-violet-500';
         } else if (key.indexOf('azure') >= 0) {
           pill.classList.add('bg-sky-50', 'border-sky-200', 'text-sky-800'); dotClass = 'bg-sky-500';
-        } else if (key.indexOf('google') >= 0) {
-          pill.classList.add('bg-emerald-50', 'border-emerald-200', 'text-emerald-800'); dotClass = 'bg-emerald-500';
         } else {
           pill.classList.add('bg-white', 'border-slate-200', 'text-slate-700');
         }
@@ -3380,7 +3378,47 @@
         return list.slice(-5).join(' | ');
       }
 
+      function downloadTranslationFailureReport(chapterTitle, error) {
+        const errors = (window._ao3TranslationProviderErrors || []).slice();
+        const report = [
+          'AO3 번역 실패 보고서',
+          '시각: ' + new Date().toLocaleString('ko-KR'),
+          '챕터: ' + String(chapterTitle || '(제목 없음)'),
+          '결과: API 공급자 순환 2회 후 중단. 원문은 번역 완료로 저장되지 않았습니다.',
+          '최종 오류: ' + String(error && error.message || error || '알 수 없는 오류'),
+          '', '공급자 시도 및 오류:', errors.length ? errors.join('\n') : '(기록 없음)'
+        ].join('\n');
+        const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'ao3-translation-failure-' + Date.now() + '.txt';
+        document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+      }
+
       async function translateParagraphBatch(enStrings, contextMeta) {
+        const maxRounds = 2;
+        let lastError = null;
+        for (let round = 1; round <= maxRounds; round++) {
+          setTranslationProviderStatus('API', '공급자 순환 ' + round + '/' + maxRounds);
+          try {
+            return await translateParagraphBatchOnce(enStrings, contextMeta);
+          } catch (error) {
+            lastError = error;
+            if (round < maxRounds) await ao3Sleep(800);
+          }
+        }
+        const message = '설정된 API 공급자를 2회 순환했지만 번역에 성공하지 못해 작업을 중단했습니다. ' +
+          String(lastError && lastError.message || lastError || '') +
+          (getTranslationProviderErrorSummary() ? ' · ' + getTranslationProviderErrorSummary() : '');
+        recordTranslationProviderError('작업 중단', message);
+        const exhausted = new Error(message);
+        exhausted.translationRoundsExhausted = true;
+        throw exhausted;
+      }
+
+      async function translateParagraphBatchOnce(enStrings, contextMeta) {
         // Text replacement rules apply only after translation, never to the source text.
         const preparedStrings = enStrings.map(function(s) {
           if (isSceneDividerLine(s)) return '* * *';
@@ -3395,7 +3433,7 @@
         // 1. Gemini key pool: round-robin across requests, try every configured key on failure.
         const geminiKeys = Array.from(new Set(String(state.settings.geminiApiKeys || state.settings.geminiApiKey || '')
           .split(/[\r\n,;]+/).map(function(k) { return k.trim(); }).filter(Boolean)));
-        if (state.settings.engine !== 'free_gtx' && geminiKeys.length) {
+        if (geminiKeys.length) {
           const modelName = (state.settings.geminiModel || DEFAULT_GEMINI_MODEL).trim();
           const startIndex = (window._ao3GeminiNextKeyIndex || 0) % geminiKeys.length;
           window._ao3GeminiNextKeyIndex = (startIndex + 1) % geminiKeys.length;
@@ -3507,7 +3545,6 @@
 
         // 2. Cloudflare Workers AI fallback (the second engine after Gemini).
         async function attemptWorkersAIProvider() {
-          if (state.settings.engine === 'free_gtx') return null;
           if (state.settings.workersAiEnabled === false) {
             setTranslationProviderStatus('Cloudflare Workers AI', '사용 안 함 · Groq로 전환');
             return null;
@@ -3582,7 +3619,7 @@
         }
         async function attemptGroqProvider() {
         // Groq primary fallback attempt after Gemini.
-        if (state.settings.engine !== 'free_gtx') {
+        {
           if (!window._ao3CloudflareProviderConfigReady) await refreshCloudflareProviderConfig();
           const groqKey = String(state.settings.groqApiKey || '').trim();
           const groqServerSecretAvailable = Boolean(window._ao3CloudflareServerProviders && window._ao3CloudflareServerProviders.groq);
@@ -3688,7 +3725,7 @@
         const azureServerSecretAvailable = Boolean(window._ao3CloudflareServerProviders && window._ao3CloudflareServerProviders.azure);
         const azureCooldownKey = azureKey || (azureServerSecretAvailable ? '__cloudflare_azure_secret__' : '');
         const azureCoolingDown = window._ao3AzureCooldownKey === azureCooldownKey && Number(window._ao3AzureCooldownUntil || 0) > Date.now();
-        if (state.settings.engine !== 'free_gtx' && (azureKey || azureServerSecretAvailable) && !azureCoolingDown) {
+        if ((azureKey || azureServerSecretAvailable) && !azureCoolingDown) {
           try {
             const azurePlan = ao3BuildAzureRequestBatches(preparedStrings);
             const translatedByOriginal = azurePlan.translatedByOriginal;
@@ -3798,7 +3835,7 @@
             setTranslationProviderStatus('Azure Translator', '백업 요청 오류');
             console.warn('Azure Translator backup request failed.', azureError && azureError.message ? azureError.message : azureError);
           }
-        } else if (azureCoolingDown && state.settings.engine !== 'free_gtx') {
+        } else if (azureCoolingDown) {
           setTranslationProviderStatus('Azure Translator', '일시 제한');
           recordTranslationProviderError('Azure Translator', '이전 요청의 401/403 또는 429 오류로 일시 건너뛰고 Groq로 전환합니다.');
           console.info('Azure Translator is temporarily cooling down after a rate/authorization error; skipping it and continuing to Groq fallback.');
@@ -3866,97 +3903,7 @@
           }
         }
 
-        // 4. Free Google Translate GTX endpoint (last resort after Gemini, Workers AI, Groq and Azure). Never silently return English as a translation.
-        setTranslationProviderStatus('Google 번역', '최후 대체 요청 중');
-        const googleErrors = [];
-        const googleResults = new Array(preparedStrings.length);
-        // Chunk within a safe URL size. This keeps the final free fallback from turning
-        // a long chapter into dozens of serial network requests.
-        const googleBatches = [];
-        let googleBatch = [];
-        let googleBatchChars = 0;
-        for (let idx = 0; idx < preparedStrings.length; idx++) {
-          const text = preparedStrings[idx];
-          const extra = text.length + (googleBatch.length ? 2 : 0);
-          if (googleBatch.length && googleBatchChars + extra > 3800) {
-            googleBatches.push(googleBatch);
-            googleBatch = [];
-            googleBatchChars = 0;
-          }
-          googleBatch.push({ index: idx, text: text });
-          googleBatchChars += text.length + (googleBatch.length > 1 ? 2 : 0);
-        }
-        if (googleBatch.length) googleBatches.push(googleBatch);
-
-        async function translateGoogleSingle(item) {
-          if (isSceneDividerLine(enStrings[item.index])) return '* * *';
-          const singleUrl = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ko&dt=t&q=' + encodeURIComponent(item.text);
-          const response = await fetchWithTimeout(singleUrl, {}, 12000);
-          if (!response.ok) throw new Error('문단 ' + (item.index + 1) + ' 실패: HTTP ' + response.status + (response.status === 429 ? ' · 요청 한도 초과' : ''));
-          const data = await response.json();
-          const koText = Array.isArray(data && data[0]) ? data[0].map(function(segment) { return segment[0] || ''; }).join('') : '';
-          if (!koText.trim()) throw new Error('문단 ' + (item.index + 1) + ' 결과가 비어 있습니다.');
-          const finalText = finalizeTranslatedParagraph(koText);
-          if (hasUntranslatedEnglishResidue(item.text, finalText)) throw new Error('문단 ' + (item.index + 1) + '에 영어 원문이 남아 있습니다.');
-          return finalText;
-        }
-
-        for (let batchIndex = 0; batchIndex < googleBatches.length; batchIndex++) {
-          const batch = googleBatches[batchIndex];
-          let batchAccepted = false;
-          const joined = batch.map(function(item) { return item.text; }).join('\n\n');
-          if (joined.length <= 4200) {
-            try {
-              const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ko&dt=t&q=' + encodeURIComponent(joined);
-              const response = await fetchWithTimeout(url, {}, 12000);
-              if (!response.ok) throw new Error('HTTP ' + response.status + (response.status === 429 ? ' · 요청 한도 초과' : ''));
-              const data = await response.json();
-              if (!Array.isArray(data) || !Array.isArray(data[0])) throw new Error('응답 JSON 형식이 예상과 다름');
-              const fullTranslated = data[0].map(function(segment) { return segment[0] || ''; }).join('');
-              const splitBack = fullTranslated.split(/\n\s*\n/);
-              if (splitBack.length !== batch.length || splitBack.some(function(part, idx) { return !isSceneDividerLine(enStrings[batch[idx].index]) && !String(part || '').trim(); })) {
-                throw new Error('묶음 응답의 문단 구분이 원문과 일치하지 않음');
-              }
-              const stagedBatch = splitBack.map(function(part, localIndex) {
-                const item = batch[localIndex];
-                if (isSceneDividerLine(enStrings[item.index])) return '* * *';
-                const finalText = finalizeTranslatedParagraph(part);
-                if (hasUntranslatedEnglishResidue(item.text, finalText)) throw new Error('문단 ' + (item.index + 1) + '에 영어 원문이 남아 있습니다.');
-                return finalText;
-              });
-              stagedBatch.forEach(function(text, localIndex) { googleResults[batch[localIndex].index] = text; });
-              batchAccepted = true;
-            } catch (err) {
-              googleErrors.push('묶음 ' + (batchIndex + 1) + ': ' + String(err && err.message || err));
-            }
-          } else {
-            googleErrors.push('묶음 ' + (batchIndex + 1) + ': URL 길이 제한으로 개별 요청 전환');
-          }
-
-          if (!batchAccepted) {
-            setTranslationProviderStatus('Google 번역', '문단별 대체 번역 중 · 묶음 ' + (batchIndex + 1) + '/' + googleBatches.length);
-            // Retry only the malformed/oversized batch item-by-item; earlier accepted
-            // batches remain staged but are still committed only if every paragraph succeeds.
-            for (let localIndex = 0; localIndex < batch.length; localIndex++) {
-              const item = batch[localIndex];
-              try {
-                googleResults[item.index] = await translateGoogleSingle(item);
-              } catch (err) {
-                recordTranslationProviderError('Google 번역', (err && err.message ? err.message : String(err)) + (googleErrors.length ? ' · 묶음 오류: ' + googleErrors.slice(-2).join('; ') : ''));
-                setTranslationProviderStatus('Google 번역', '실패 · 번역 중단');
-                throw new Error('모든 번역 API가 이 문단 묶음을 완료하지 못했습니다. 원문을 번역문으로 저장하지 않았습니다. ' + getTranslationProviderErrorSummary());
-              }
-              if (localIndex + 1 < batch.length) await ao3Sleep(100);
-            }
-          }
-        }
-        if (googleResults.some(function(value, index) { return typeof value !== 'string' || (!value.trim() && !isSceneDividerLine(enStrings[index])); })) {
-          recordTranslationProviderError('Google 번역', '번역 결과에서 빈 문단을 감지했습니다.');
-          throw new Error('무료 번역 결과에 빈 문단이 있어 저장하지 않았습니다.');
-        }
-        googleResults.translationProvider = 'Google 번역';
-        setTranslationProviderStatus('Google 번역', '번역 완료');
-        return googleResults;
+        throw new Error('설정된 Gemini, Workers AI, Groq, Azure API가 모두 실패했습니다.');
       }
 
       // High-speed chapter translation with larger batches & parallel concurrency
@@ -4210,7 +4157,8 @@
           statusText.textContent = '번역 실패 · 원문을 번역문으로 저장하지 않았습니다.';
           setTranslationProviderStatus(window._ao3LastTranslationProvider || 'API', '실패');
           recordTranslationProviderError('번역 중단', err && err.message ? err.message : err);
-          showToast('번역에 실패했습니다. 진행 창에서 API 오류 이유를 확인하세요.', 'warning');
+          downloadTranslationFailureReport(ch.title, err);
+          showToast('API 공급자 순환 2회 후 번역을 중단했습니다. 실패 보고서를 다운로드하고 진행 창에 오류를 표시했습니다.', 'warning');
         }
       }
 
@@ -4241,8 +4189,9 @@
           } catch (err) {
             statusText.textContent = '챕터 ' + (i + 1) + ' 번역 실패 · 이후 챕터는 중단됨';
             recordTranslationProviderError('챕터 ' + (i + 1), err && err.message ? err.message : err);
+            downloadTranslationFailureReport(ch.title, err);
             setTranslationProviderStatus(window._ao3LastTranslationProvider || 'API', '실패');
-            showToast('번역 실패 이유를 진행 창에서 확인하세요.', 'warning');
+            showToast('API 공급자 순환 2회 후 번역을 중단했습니다. 실패 보고서를 다운로드하고 진행 창에 오류를 표시했습니다.', 'warning');
             return false;
           }
         }
@@ -6961,7 +6910,7 @@
           syncAppThemeButtons();
         }
         function populateApiSettingsModal() {
-          const engineVal = state.settings.engine === 'free_gtx' ? 'free_gtx' : 'gemini_api';
+          const engineVal = 'gemini_api';
           document.getElementById('translationEngineSelect').value = engineVal;
           document.getElementById('geminiModelSelect').value = state.settings.geminiModel || DEFAULT_GEMINI_MODEL;
           document.getElementById('geminiApiKeysInput').value = state.settings.geminiApiKeys || state.settings.geminiApiKey || '';

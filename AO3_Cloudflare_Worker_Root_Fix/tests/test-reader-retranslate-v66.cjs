@@ -8,5 +8,5 @@ if (html.includes('readerRetranslateChapterBtn') || html.includes('AI 재번역'
 if (js.includes("closest('#readerRetranslateChapterBtn')")) throw new Error('Reader retranslation click handler was not removed');
 if (css.includes('#readerRetranslateChapterBtn')) throw new Error('Reader retranslation button styles remain');
 if (!css.includes('body.reader-reading #readerNovelTitle > .reader-title-translated')) throw new Error('Compact reader title style missing');
-if (!html.includes('/assets/app.js?v=78.0') || !html.includes('/assets/app.css?v=78.0')) throw new Error('Asset cache version not updated');
+if (!html.includes('/assets/app.js?v=82.0') || !html.includes('/assets/app.css?v=82.0')) throw new Error('Asset cache version not updated');
 console.log('Reader retranslation removal regression checks passed.');
