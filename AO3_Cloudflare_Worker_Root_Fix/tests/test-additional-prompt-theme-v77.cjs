@@ -9,7 +9,7 @@ const panel = html.match(/<div id="additionalPromptSettingsPanel"[\s\S]*?<\/div>
 assert(!/bg-violet|border-violet|text-violet|focus:border-violet/.test(panel), 'Additional prompt markup still hardcodes violet colors');
 assert(css.includes('#additionalPromptSettingsPanel'), 'Base additional prompt palette is missing');
 for (const theme of ['dark', 'green']) assert(css.includes(`html[data-app-theme="${theme}"] #additionalPromptSettingsPanel`), `${theme} additional prompt palette is missing`);
-assert(html.includes('app.css?v=82.0') && html.includes('app.js?v=85.0'), 'App cache-busting version was not updated');
+assert(html.includes('app.css?v=82.0') && html.includes('app.js?v=86.0'), 'App cache-busting version was not updated');
 console.log('Additional prompt theme contrast checks passed.');
 
 assert(css.includes('html[data-app-theme="green"] #ao3FetchLogBox {'), 'Green extraction log palette is missing');
