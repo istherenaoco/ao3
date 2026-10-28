@@ -1,0 +1,18 @@
+const fs = require('fs');
+const assert = require('assert');
+const app = fs.readFileSync('public/assets/app.js', 'utf8');
+const html = fs.readFileSync('public/index.html', 'utf8');
+const start = app.indexOf('// Paste an already-translated chapter and save it directly; this path must never call a translation API.');
+assert(start >= 0, 'save-only pasted translation handler exists');
+const end = app.indexOf('// Translate All Drafts & Clear Drafts', start);
+assert(end > start, 'pasted translation handler has a clear boundary');
+const handler = app.slice(start, end);
+assert(!/autoTranslateAndSaveWorkToBookshelf|translateParagraphBatch|translateText|runTranslateAllDrafts|drainAo3LinkTranslationQueue/.test(handler), 'paste-save path must not invoke translation APIs or queues');
+assert(/en:\s*''/.test(handler), 'pasted translation must not be misrepresented as English original');
+assert(/ko:\s*text/.test(handler), 'pasted text is stored as the translated paragraph');
+assert(/saveToStorage\(targetNovel\.id\)/.test(handler), 'save directly to local bookshelf storage');
+assert(/openNovelInReader\(targetNovel\.id, targetNovel\.chapters\.indexOf\(chapter\)\)/.test(handler), 'open saved chapter in reader');
+assert(/이미 번역된 본문/.test(html), 'UI labels the field as already-translated text');
+assert(/API 번역 없이 책장에 저장됩니다/.test(html), 'UI explains that no API translation is performed');
+assert(/app\.js\?v=109\.0/.test(html), 'asset cache version bumped');
+console.log('PASS: pasted translated text is stored directly without translation API calls');
