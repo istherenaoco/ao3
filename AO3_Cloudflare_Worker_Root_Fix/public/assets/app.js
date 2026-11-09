@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '111';
+      window.__AO3_BUILD_VERSION__ = '112';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -7677,13 +7677,17 @@
             targetNovel = state.novels.find(function(n) { return n.ao3WorkId === workId; }) || null;
           }
 
+          const shareUrl = parsedTranslation.meta.shareUrl || '';
+          if (!targetNovel && shareUrl && state.studioBindMode !== 'append') {
+            targetNovel = state.novels.find(function(n) { return (n.importSourceUrls || []).includes(shareUrl); }) || null;
+          }
           if (!targetNovel && inferredTitle !== '번역 소설' && author) {
             targetNovel = state.novels.find(function(n) {
               return n.title === inferredTitle && n.author === (cleanAo3AuthorName(author) || 'Anonymous');
             }) || null;
           }
           const now = Date.now();
-          const savedChapters = parsedTranslation.chapters.map(function(parsedChapter, chapterIndex) {
+          let savedChapters = parsedTranslation.chapters.map(function(parsedChapter, chapterIndex) {
           return {
             id: 'ch_' + chapterIndex + '_' + now + '_' + Math.random().toString(36).slice(2, 7),
             title: customChapterTitle && parsedTranslation.chapters.length === 1 ? customChapterTitle : parsedChapter.title,
@@ -7701,6 +7705,15 @@
             })
           };
           });
+          if (shareUrl && targetNovel) {
+            savedChapters = savedChapters.filter(function(incoming) {
+              return !(targetNovel.chapters || []).some(function(existing) {
+                return existing.title === incoming.title && JSON.stringify((existing.paragraphs || []).map(function(p) { return p.ko; })) ===
+                  JSON.stringify(incoming.paragraphs.map(function(p) { return p.ko; }));
+              });
+            });
+            if (!savedChapters.length) { showToast('이미 책장에 저장된 공유 대화입니다.', 'warning'); return true; }
+          }
           const chapter = savedChapters[0];
           const isBookmarked = document.getElementById('studioBookmarkCheck').checked;
           const rawTags = document.getElementById('studioBookmarkTagsInput').value
@@ -7737,15 +7750,49 @@
             delete state.deletedNovelIds[targetNovel.id];
             state.novels.unshift(targetNovel);
           }
+          if (shareUrl) {
+            targetNovel.importSourceUrls = Array.from(new Set((targetNovel.importSourceUrls || []).concat([shareUrl])));
+          }
           saveToStorage(targetNovel.id);
           resetPasteFields();
           document.getElementById('studioBookmarkCheck').checked = false;
           document.getElementById('studioBookmarkTagsInput').value = '';
           openNovelInReader(targetNovel.id, targetNovel.chapters.indexOf(chapter));
           showToast(savedChapters.length + '개 챕터를 책장에 저장했습니다.');
+          return true;
         }
         document.getElementById('addPastedChapterBtn').addEventListener('click', function() {
           saveFinishedTranslation(null);
+        });
+        document.getElementById('chatgptShareImportBtn').addEventListener('click', async function(event) {
+          const input = document.getElementById('chatgptShareUrlInput');
+          const button = event.currentTarget;
+          if (!input.value.trim()) { showToast('공개 공유 링크를 입력해 주세요.', 'warning'); input.focus(); return; }
+          button.disabled = true;
+          const label = button.textContent;
+          button.textContent = '불러오는 중…';
+          try {
+            const response = await fetch('/api/chatgpt-share?url=' + encodeURIComponent(input.value.trim()), { signal: AbortSignal.timeout(30000) });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || '공유 페이지를 불러오지 못했습니다.');
+            const parsed = window.ChatgptShareImport.parse(data.html);
+            parsed.meta.shareUrl = data.shareUrl || input.value.trim();
+            const needsMetadata = (parsed.missingTitle && !document.getElementById('pasteNovelTitleInput').value.trim()) ||
+              (parsed.missingAuthor && !document.getElementById('pasteNovelAuthorInput').value.trim());
+            const saved = await saveFinishedTranslation(parsed);
+            if (saved) {
+              input.value = '';
+              if (needsMetadata) showToast('저장했습니다. 대화에 없는 작품명·저자는 자동 인식할 수 없어 임시 정보로 저장했습니다.', 'warning');
+            }
+          } catch (error) {
+            showToast('공유 링크 저장 실패: ' + (error.name === 'TimeoutError' ? '응답 시간이 초과됐습니다. 본문 붙여넣기를 이용해 주세요.' : error.message), 'error');
+          } finally {
+            button.disabled = false;
+            button.textContent = label;
+          }
+        });
+        document.getElementById('chatgptShareUrlInput').addEventListener('keydown', function(event) {
+          if (event.key === 'Enter') { event.preventDefault(); document.getElementById('chatgptShareImportBtn').click(); }
         });
         document.getElementById('translatedFileBtn').addEventListener('click', function() {
           document.getElementById('translatedFileInput').click();
