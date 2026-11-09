@@ -7807,6 +7807,7 @@
           const receivePostedTransfer = async function() {
             try {
               const parsed = window.BrowserShareTransfer.decode(JSON.parse(browserPostedPayload.textContent));
+              await libraryHydrationPromise;
               const saved = await saveFinishedTranslation(parsed);
               if (saved) showToast(parsed.chapters.length + '개 챕터를 브라우저에서 받아 저장했습니다.' + (parsed.missingAuthor ? ' 저자는 대화에서 확인되지 않았습니다.' : ''), 'warning');
             } catch (error) {
