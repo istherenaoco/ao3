@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '109';
+      window.__AO3_BUILD_VERSION__ = '110';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -7638,17 +7638,18 @@
         });
 
         // Paste an already-translated chapter and save it directly; this path must never call a translation API.
-        document.getElementById('addPastedChapterBtn').addEventListener('click', async function() {
+        async function saveFinishedTranslation(importedTranslation) {
           const rawText = document.getElementById('pasteEnglishTextarea').value.trim();
-          if (!rawText) {
+          if (!rawText && !importedTranslation) {
             showToast('번역된 본문을 붙여넣어 주세요.', 'warning');
             document.getElementById('pasteEnglishTextarea').focus();
             return;
           }
+          const parsedTranslation = importedTranslation || window.TranslationImport.parse(rawText, '');
           const workTitle = document.getElementById('pasteNovelTitleInput').value.trim();
-          const author = document.getElementById('pasteNovelAuthorInput').value.trim();
+          const author = document.getElementById('pasteNovelAuthorInput').value.trim() || parsedTranslation.meta.author;
           const customChapterTitle = document.getElementById('pasteChapterTitleInput').value.trim();
-          const sourceUrl = document.getElementById('pasteSourceUrlInput').value.trim();
+          const sourceUrl = document.getElementById('pasteSourceUrlInput').value.trim() || parsedTranslation.meta.sourceUrl;
           const resetPasteFields = function() {
             document.getElementById('pasteEnglishTextarea').value = '';
             document.getElementById('pasteNovelTitleInput').value = '';
@@ -7657,22 +7658,11 @@
             document.getElementById('pasteSourceUrlInput').value = '';
           };
 
-          // Treat the pasted content strictly as finished translation text. Do not parse it as AO3 HTML,
-          // do not add it to translation drafts, and do not call Gemini/Groq/Azure/Workers AI.
-          let translatedParagraphs = rawText.split(/\r?\n\s*\r?\n/).map(function(p) { return p.trim(); }).filter(Boolean);
-          if (translatedParagraphs.length <= 1 && /\r?\n/.test(rawText)) {
-            translatedParagraphs = rawText.split(/\r?\n/).map(function(p) { return p.trim(); }).filter(Boolean);
-          }
-          translatedParagraphs = translatedParagraphs.map(function(p) {
-            return p.replace(/[ \t]+/g, ' ').trim();
-          }).filter(Boolean);
-          if (!translatedParagraphs.length) {
+          if (!parsedTranslation.chapters.length) {
             showToast('번역 본문을 인식하지 못했습니다.', 'warning');
             return;
           }
-
-          const chapterTitle = customChapterTitle || 'Chapter 1';
-          const inferredTitle = workTitle || customChapterTitle || translatedParagraphs[0].slice(0, 42) || '번역 소설';
+          const inferredTitle = workTitle || parsedTranslation.meta.title;
           const workIdMatch = sourceUrl.match(/\/works\/(\d+)/);
           const workId = workIdMatch ? workIdMatch[1] : null;
           let targetNovel = null;
@@ -7687,12 +7677,19 @@
             targetNovel = state.novels.find(function(n) { return n.ao3WorkId === workId; }) || null;
           }
 
+          if (!targetNovel && inferredTitle !== '번역 소설' && author) {
+            targetNovel = state.novels.find(function(n) {
+              return n.title === inferredTitle && n.author === (cleanAo3AuthorName(author) || 'Anonymous');
+            }) || null;
+          }
           const now = Date.now();
-          const chapter = {
-            id: 'ch_' + now + '_' + Math.random().toString(36).slice(2, 7),
-            title: chapterTitle,
+          const savedChapters = parsedTranslation.chapters.map(function(parsedChapter, chapterIndex) {
+          return {
+            id: 'ch_' + chapterIndex + '_' + now + '_' + Math.random().toString(36).slice(2, 7),
+            title: customChapterTitle && parsedTranslation.chapters.length === 1 ? customChapterTitle : parsedChapter.title,
             sourceUrl: sourceUrl,
-            paragraphs: translatedParagraphs.map(function(text, index) {
+            sourceChapterNumber: parsedChapter.number || null,
+            paragraphs: parsedChapter.paragraphs.map(function(text, index) {
               return {
                 id: 'para_' + now + '_' + index + '_' + Math.random().toString(36).slice(2, 5),
                 en: '',
@@ -7703,12 +7700,14 @@
               };
             })
           };
+          });
+          const chapter = savedChapters[0];
           const isBookmarked = document.getElementById('studioBookmarkCheck').checked;
           const rawTags = document.getElementById('studioBookmarkTagsInput').value
             .split(',').map(function(t) { return t.replace(/^#+/, '').trim(); }).filter(Boolean);
 
           if (targetNovel) {
-            targetNovel.chapters = (targetNovel.chapters || []).concat([chapter]);
+            targetNovel.chapters = (targetNovel.chapters || []).concat(savedChapters);
             if (isBookmarked) {
               targetNovel.bookmarked = true;
               targetNovel.bookmarkTags = Array.isArray(targetNovel.bookmarkTags) ? targetNovel.bookmarkTags : [];
@@ -7733,7 +7732,7 @@
               updatedAt: now,
               lastReadAt: now,
               lastReadChapterIndex: 0,
-              chapters: [chapter]
+              chapters: savedChapters
             };
             delete state.deletedNovelIds[targetNovel.id];
             state.novels.unshift(targetNovel);
@@ -7743,7 +7742,29 @@
           document.getElementById('studioBookmarkCheck').checked = false;
           document.getElementById('studioBookmarkTagsInput').value = '';
           openNovelInReader(targetNovel.id, targetNovel.chapters.indexOf(chapter));
-          showToast('이미 번역된 본문을 API 번역 없이 책장에 저장했습니다.');
+          showToast(savedChapters.length + '개 챕터를 책장에 저장했습니다.');
+        }
+        document.getElementById('addPastedChapterBtn').addEventListener('click', function() {
+          saveFinishedTranslation(null);
+        });
+        document.getElementById('translatedFileBtn').addEventListener('click', function() {
+          document.getElementById('translatedFileInput').click();
+        });
+        document.getElementById('translatedFileInput').addEventListener('change', async function(event) {
+          const file = event.target.files && event.target.files[0];
+          if (!file) return;
+          const button = document.getElementById('translatedFileBtn');
+          button.disabled = true;
+          try {
+            if (file.size > 25 * 1024 * 1024) throw new Error('파일은 25MB 이하로 선택해 주세요.');
+            if (!/\.(?:txt|md|html?|xhtml)$/i.test(file.name)) throw new Error('TXT, Markdown, HTML 번역본을 선택해 주세요.');
+            await saveFinishedTranslation(window.TranslationImport.parse(await file.text(), file.name));
+          } catch (error) {
+            showToast('번역본 저장 실패: ' + error.message, 'error');
+          } finally {
+            button.disabled = false;
+            event.target.value = '';
+          }
         });
 
         // Translate All Drafts & Clear Drafts

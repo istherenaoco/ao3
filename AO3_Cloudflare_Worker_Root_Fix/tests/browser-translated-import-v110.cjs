@@ -1,0 +1,25 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+(async () => {
+ const browser = await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH || '/usr/bin/chromium',args:['--no-sandbox']});
+ const page = await browser.newPage();
+ const errors=[]; page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:4173');
+ await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__ === '110');
+ await page.locator('#translatedFileInput').setInputFiles({name:'번역.txt',mimeType:'text/plain',buffer:Buffer.from('제목: 별빛\n저자: Writer\nChapter 1: 시작\n첫 본문.\n후기:\n제외됨\nChapter 2: 재회\n둘째 본문.')});
+ await page.waitForFunction(()=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')||'[]').some(n=>n.title==='별빛'));
+ let saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')).find(n=>n.title==='별빛'));
+ assert.equal(saved.author,'Writer'); assert.equal(saved.chapters.length,2);
+ assert.equal(saved.chapters[0].paragraphs[0].ko,'첫 본문.');
+ assert(!JSON.stringify(saved).includes('제외됨'));
+ await page.reload();
+ await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__ === '110');
+ await page.locator('#translatedFileInput').setInputFiles({name:'번역.md',mimeType:'text/plain',buffer:Buffer.from('# 별빛\n저자: Writer\nChapter 3\n셋째 본문.')});
+ await page.waitForFunction(()=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')).find(n=>n.title==='별빛').chapters.length===3);
+ const htmlParsed=await page.evaluate(()=>window.TranslationImport.parse('<html><h2 class="title">HTML 작품</h2><a rel="author">Author</a><div id="chapters"><div class="chapter"><h3 class="title">Chapter 1</h3><div class="notes">삭제 노트</div><div class="userstuff"><p>HTML 본문</p></div></div></div></html>', 'test.html'));
+ assert.equal(htmlParsed.meta.title,'HTML 작품'); assert.equal(htmlParsed.chapters[0].paragraphs[0],'HTML 본문');
+ assert(!JSON.stringify(htmlParsed).includes('삭제 노트'));
+ assert.deepEqual(errors,[]);
+ console.log('PASS browser file upload, metadata, chapter linking, notes removal, reload persistence, HTML');
+ await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});
