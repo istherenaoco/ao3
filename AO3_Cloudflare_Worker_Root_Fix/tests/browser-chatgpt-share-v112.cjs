@@ -3,7 +3,7 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});
  try{
  const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(process.env.TEST_BASE_URL||'http://127.0.0.1:4174');await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__==='112');
+ await page.goto(process.env.TEST_BASE_URL||'http://127.0.0.1:4174');await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__==='113');
  const message=(id,text,metadata={},role='assistant')=>({id,author:{role},channel:'final',recipient:'all',content:{parts:[text]},metadata});
  const final=message('full','# Test Book\n## Chapter 1: One\n아래는 본문 번역입니다.\n\n---\n\n첫 문단.\n둘째 문단.\n\n**챕터 1 끝**',{is_merged_message:true,source_message_ids:['fragment']});
  const data={linear_conversation:[{message:message('fragment','중복 조각',{is_message_fragment:true,merged_message_id:'full'})},{message:final},{message:message('prompt','저자: Writer\n원문 URL: https://archiveofourown.org/works/123\n영어 원문',{},'user')},{message:message('full2','# Chapter 2: Two\n*소제목*\n\n**챕터 요약:**  \n요약 내용.\n\n셋째 문단.\n\n*챕터 2 본문 끝.*')}]};

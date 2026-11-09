@@ -7,7 +7,7 @@ const path = require('node:path');
  const page = await browser.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(process.env.TEST_BASE_URL || 'http://127.0.0.1:4173');
- await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__ === '112');
+ await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__ === '113');
  await page.locator('#translatedFileInput').setInputFiles(path.join(__dirname,'fixtures/translated-korean.pdf')); 
  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')||'[]').some(n=>n.title==='별빛'));
  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')).find(n=>n.title==='별빛'));
@@ -23,7 +23,7 @@ const path = require('node:path');
  assert.deepEqual(plain.chapters.map(c=>c.paragraphs.map(p=>p.ko)),[['첫 번째 본문입니다.'],['두 번째 본문입니다.']]);
  const savedCount = await page.evaluate(()=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')).length);
  await page.reload();
- await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__ === '112');
+ await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__ === '113');
  for (const [filename, message] of [['scanned.pdf','스캔 PDF'],['locked.pdf','암호']]) {
    await page.locator('#translatedFileInput').setInputFiles(path.join(__dirname,'fixtures',filename));
    await page.waitForFunction(text=>document.getElementById('toastContainer').textContent.includes(text),message);

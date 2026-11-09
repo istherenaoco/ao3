@@ -68,6 +68,8 @@
     const plain = function(line) { return line.trim().replace(/<[^>]+>/g, '').replace(/^#{1,6}\s+/, '').replace(/^[*_]+|[*_]+$/g, '').trim(); };
     let number = null, hasBody = false, skipSummary = false;
     const divider = lines.findIndex(function(line, index) { return index < 12 && line.trim() === '---'; });
+    const bodyMarker = lines.findIndex(function(line, index) { return index < 120 && /^(?:본문|번역문|본편|chapter text|work text)\s*[:：]?$/i.test(plain(line)); });
+    const frontMatterEnd = bodyMarker >= 0 ? bodyMarker : divider;
     const out = [];
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index], heading = plain(line);
@@ -80,7 +82,9 @@
         number = next; hasBody = false; skipSummary = false;
         out.push('# ' + heading); continue;
       }
-      if (index < divider) {
+      if (/^(?:If you want,? I can\s*:|원하시면.*(?:드릴|할|해드릴).*[:：])$/i.test(heading) && lines.slice(index + 1, index + 5).some(function(next) { return /^\s*[-*]\s+/.test(next); })) break;
+      if (/^(?:다음 (?:부분|답변)에서 이어집니다[.!]?|계속됩니다[.!]?)$/u.test(heading)) continue;
+      if (index < frontMatterEnd) {
         if (/^#\s+/.test(line) || /^(?:제목|작품명|title|작가|저자|author|원문|출처|source)\s*[:：]/i.test(heading)) out.push(line);
         continue;
       }

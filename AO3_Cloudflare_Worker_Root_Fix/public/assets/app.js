@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '112';
+      window.__AO3_BUILD_VERSION__ = '113';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -7764,6 +7764,63 @@
         document.getElementById('addPastedChapterBtn').addEventListener('click', function() {
           saveFinishedTranslation(null);
         });
+        let browserBookmarkletText = '';
+        const browserHelp = document.getElementById('browserImportHelpDialog');
+        const browserReceive = document.getElementById('browserImportReceiveDialog');
+        const openImportDialog = function(dialog) {
+          if (dialog.open) return;
+          if (typeof dialog.showModal === 'function') dialog.showModal();
+          else dialog.setAttribute('open', '');
+        };
+        async function openBrowserImportHelp() {
+          openImportDialog(browserHelp);
+          const status = document.getElementById('browserBookmarkletStatus');
+          const button = document.getElementById('copyBrowserBookmarkletBtn');
+          if (browserBookmarkletText) return;
+          status.textContent = '실행 주소 준비 중…';
+          try {
+            const response = await fetch('/assets/chatgpt-to-bookshelf.txt?v=113.0');
+            if (!response.ok) throw new Error('실행 주소를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.');
+            browserBookmarkletText = await response.text();
+            if (!browserBookmarkletText.startsWith('javascript:')) throw new Error('실행 주소 형식이 올바르지 않습니다.');
+            button.disabled = false;
+            status.textContent = '한 번 설정하면 이후에는 공유 페이지에서 책갈피 실행만 하면 됩니다.';
+          } catch (error) { status.textContent = error.message; }
+        }
+        document.getElementById('browserImportHelpBtn').addEventListener('click', openBrowserImportHelp);
+        document.getElementById('closeBrowserHelpBtn').addEventListener('click', function() { browserHelp.close(); });
+        document.getElementById('closeBrowserReceiveBtn').addEventListener('click', function() { browserReceive.close(); });
+        document.getElementById('copyBrowserBookmarkletBtn').addEventListener('click', async function() {
+          const status = document.getElementById('browserBookmarkletStatus');
+          try {
+            await navigator.clipboard.writeText(browserBookmarkletText);
+            status.textContent = '복사했습니다. 책갈피의 주소 칸에 붙여넣으세요.';
+          } catch (error) {
+            status.textContent = '자동 복사가 허용되지 않았습니다. 아래 주소를 길게 눌러 전체 선택 후 복사하세요.';
+            let field = document.getElementById('browserBookmarkletManualCopy');
+            if (!field) { field = document.createElement('textarea'); field.id = 'browserBookmarkletManualCopy'; field.style.cssText = 'width:100%;height:100px;background:white;color:#111'; status.after(field); }
+            field.value = browserBookmarkletText; field.focus(); field.select();
+          }
+        });
+        const browserPostedPayload = document.getElementById('browserTransferPayload');
+        if (browserPostedPayload) {
+          const receivePostedTransfer = async function() {
+            try {
+              const parsed = window.BrowserShareTransfer.decode(JSON.parse(browserPostedPayload.textContent));
+              const saved = await saveFinishedTranslation(parsed);
+              if (saved) showToast(parsed.chapters.length + '개 챕터를 브라우저에서 받아 저장했습니다.' + (parsed.missingAuthor ? ' 저자는 대화에서 확인되지 않았습니다.' : ''), 'warning');
+            } catch (error) {
+              openImportDialog(browserReceive);
+              document.getElementById('browserReceiveStatus').textContent = error.message;
+            } finally {
+              browserPostedPayload.remove();
+              history.replaceState(null, '', '/');
+            }
+          };
+          receivePostedTransfer();
+        }
+        const browserImportParams = new URLSearchParams(location.search);
+        if (browserImportParams.get('setup') === 'browser') openBrowserImportHelp();
         document.getElementById('chatgptShareImportBtn').addEventListener('click', async function(event) {
           const input = document.getElementById('chatgptShareUrlInput');
           const button = event.currentTarget;
@@ -7774,7 +7831,7 @@
           try {
             const response = await fetch('/api/chatgpt-share?url=' + encodeURIComponent(input.value.trim()), { signal: AbortSignal.timeout(30000) });
             const data = await response.json();
-            if (!response.ok) throw new Error(data.error || '공유 페이지를 불러오지 못했습니다.');
+            if (!response.ok) { if (data.upstreamStatus === 403) openBrowserImportHelp(); throw new Error(data.error || '공유 페이지를 불러오지 못했습니다.'); }
             const parsed = window.ChatgptShareImport.parse(data.html);
             parsed.meta.shareUrl = data.shareUrl || input.value.trim();
             const needsMetadata = (parsed.missingTitle && !document.getElementById('pasteNovelTitleInput').value.trim()) ||

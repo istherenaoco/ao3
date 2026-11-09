@@ -6,8 +6,8 @@ const app = fs.readFileSync(path.join(root, 'public/assets/app.js'), 'utf8');
 const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 function assert(ok, message) { if (!ok) throw new Error(message); }
 
-assert(app.includes("window.__AO3_BUILD_VERSION__ = '112'"), 'build version should be 108');
-assert(html.includes('app.js?v=112.0'), 'app asset cache busting should be updated');
+assert(app.includes("window.__AO3_BUILD_VERSION__ = '113'"), 'build version should be 108');
+assert(html.includes('app.js?v=113.0'), 'app asset cache busting should be updated');
 assert(app.includes('applyLiveTranslationBatchToChapter(draftChapter, update.batch);'), 'live shelf callback must apply each completed batch before copying paragraphs');
 
 function extractFunction(source, name) {
