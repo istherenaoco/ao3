@@ -1,0 +1,18 @@
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const fs = require('node:fs');
+const context = vm.createContext({});
+vm.runInContext(fs.readFileSync('public/assets/translated-import.js', 'utf8'), context);
+const parse = context.TranslationImport.parseText;
+const result = parse('# 별빛\n저자: writer\n원문 URL: https://archiveofourown.org/works/123\nChapter 1: 시작\n본문 하나.\n\n“후기는 나중에 쓰자.”\n작가의 노트:\n삭제할 말\n제2장: 재회\n본문 둘.\n후기\n삭제할 후기', 'file.txt');
+assert.equal(result.meta.title, '별빛');
+assert.equal(result.meta.author, 'writer');
+assert.equal(result.chapters.length, 2);
+assert.deepEqual(Array.from(result.chapters[0].paragraphs), ['본문 하나.', '“후기는 나중에 쓰자.”']);
+assert.equal(result.chapters[1].number, 2);
+assert.equal(result.chapters[1].paragraphs.join(''), '본문 둘.');
+assert.equal(parse('Notes:\n앞 노트\nChapter 1\n실제 본문\nEnd Notes:\n뒤 노트').chapters.length, 1);
+assert.equal(parse('Chapter 1\nNotes:\n노트\n본문:\n살릴 본문').chapters[0].paragraphs[0], '살릴 본문');
+assert.equal(parse('일반 문장\n* * *\n끝 문장', '번역.txt').chapters[0].paragraphs.length, 3);
+assert.equal(parse('후기\n노트만 있음').chapters.length, 0);
+console.log('PASS translation metadata, chapter boundaries, notes, and prose preservation');
