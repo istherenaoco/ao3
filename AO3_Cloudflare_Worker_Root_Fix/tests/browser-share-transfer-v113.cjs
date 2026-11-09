@@ -33,6 +33,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   return route.abort();
  });
  const page=await context.newPage();
+ if(process.env.DEBUG_TRANSFER){page.on('pageerror',e=>console.log('PAGE ERROR',e.message));page.on('response',r=>{if(r.url().startsWith('https://ao3.taglia.workers.dev'))console.log('TARGET',r.request().method(),new URL(r.url()).pathname,r.status());});}
  if (!process.env.LIVE_TARGET) {
   await page.goto('https://ao3.taglia.workers.dev/');
   await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__==='113');
@@ -50,7 +51,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  if(process.env.SOURCE_WAIT_MS)await page.waitForTimeout(Number(process.env.SOURCE_WAIT_MS));
  const code=decodeURIComponent(fs.readFileSync(path.join(publicRoot,'assets/chatgpt-to-bookshelf.txt'),'utf8').slice('javascript:'.length));
  await page.evaluate(code=>{(0,eval)(code);},code);
- await page.waitForURL('https://ao3.taglia.workers.dev/');
+ try {await page.waitForURL('https://ao3.taglia.workers.dev/',{waitUntil:'domcontentloaded'});}catch(error){console.log('TRANSFER STATE',page.url(),await page.evaluate(()=>({build:window.__AO3_BUILD_VERSION__,status:document.getElementById('browserReceiveStatus')?.textContent,payload:!!document.getElementById('browserTransferPayload'),receipt:sessionStorage.getItem('ao3_browser_transfer_saved'),books:JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')||'[]').map(n=>({title:n.title,chapters:n.chapters.length}))})));throw error;}
  await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__==='113');
  const expected=process.env.EXPECTED_TITLE||(process.env.SHARE_HTML_PATH?'BOGO':'Bridge Book');
  const expectedCount=Number(process.env.EXPECTED_CHAPTERS||(process.env.SHARE_HTML_PATH?6:2));
