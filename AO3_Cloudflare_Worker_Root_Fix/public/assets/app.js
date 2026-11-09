@@ -1,7 +1,7 @@
 
     (function() {
       'use strict';
-      window.__AO3_BUILD_VERSION__ = '110';
+      window.__AO3_BUILD_VERSION__ = '111';
 
       const STORAGE_KEY = 'ao3_korean_bookshelf_v1';
       const SETTINGS_KEY = 'ao3_korean_settings_v1';
@@ -7755,14 +7755,21 @@
           if (!file) return;
           const button = document.getElementById('translatedFileBtn');
           button.disabled = true;
+          const originalLabel = button.textContent;
           try {
             if (file.size > 25 * 1024 * 1024) throw new Error('파일은 25MB 이하로 선택해 주세요.');
-            if (!/\.(?:txt|md|html?|xhtml)$/i.test(file.name)) throw new Error('TXT, Markdown, HTML 번역본을 선택해 주세요.');
-            await saveFinishedTranslation(window.TranslationImport.parse(await file.text(), file.name));
+            if (!/\.(?:pdf|txt|md|html?|xhtml)$/i.test(file.name)) throw new Error('PDF, TXT, Markdown, HTML 번역본을 선택해 주세요.');
+            const parsed = /\.pdf$/i.test(file.name)
+              ? await window.PdfTranslationImport.read(file, function(page, total) {
+                button.textContent = 'PDF 읽는 중 · ' + page + '/' + total;
+              })
+              : window.TranslationImport.parse(await file.text(), file.name);
+            await saveFinishedTranslation(parsed);
           } catch (error) {
             showToast('번역본 저장 실패: ' + error.message, 'error');
           } finally {
             button.disabled = false;
+            button.textContent = originalLabel;
             event.target.value = '';
           }
         });

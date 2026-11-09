@@ -11,5 +11,5 @@ assert(js.includes("state.settings.azureEnabled = document.getElementById('azure
 assert(js.includes("state.settings.azureEnabled === false && forcedProvider !== 'azure'"), 'Disabled Azure must be skipped for automatic failover');
 assert(js.includes("'azureEnabled'") && js.includes("['groqEnabled', 'workersAiEnabled', 'azureEnabled', 'geminiCooldownEnabled']"), 'Azure toggle is missing from Drive preference restoration');
 assert(js.includes("if (typeof decoded.settings.azureEnabled === 'boolean') state.settings.azureEnabled = decoded.settings.azureEnabled;"), 'Azure toggle is missing from encrypted settings restoration');
-assert(html.includes('app.js?v=110.0'), 'app.js cache-busting reference was not updated');
+assert(html.includes('app.js?v=111.0'), 'app.js cache-busting reference was not updated');
 console.log('Azure auto-use toggle regression checks passed.');
