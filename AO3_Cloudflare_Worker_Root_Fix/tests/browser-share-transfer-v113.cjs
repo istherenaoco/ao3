@@ -6,14 +6,16 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const browser=await (useWebKit?webkit.launch({headless:true,proxy}):chromium.launch({headless:true,proxy,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']}));
  try {
  const {handleBrowserShareImport}=await import('../src/browser-share-import.js');
- const context=await browser.newContext(useWebKit?{isMobile:true,viewport:{width:390,height:844}}:{});
+ const context=await browser.newContext(useWebKit?{isMobile:true,viewport:{width:390,height:844},...(process.env.IPHONE_UA?{userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1'}:{})}:{});
  const publicRoot=path.resolve(__dirname,'../public');
  const sourceUrl=process.env.SHARE_URL||'https://chatgpt.com/share/6af1917c-bfc0-83e8-acbe-8c7b0f442e9a';
  const fixture=process.env.SHARE_HTML_PATH?fs.readFileSync(process.env.SHARE_HTML_PATH,'utf8'):'<script type="application/json">'+JSON.stringify({linear_conversation:[{message:{id:'final',author:{role:'assistant'},channel:'final',content:{parts:['# Bridge Book\n## Chapter 1\n첫 본문.\n## Chapter 2\n두 번째 본문.']}}}]})+'</script>';
  const inert=fixture.replace(/<script\b[^>]*>/gi,'<script type="application/json">').replace(/<link\b[^>]*>/gi,'');
- let remoteFetches=0,posts=0;
+ let remoteFetches=0,posts=0,sourceRefreshes=0,sourceFrames=0;
  await context.route('**/*',async route=>{
   const request=route.request(),u=new URL(request.url());
+  if(u.origin==='https://chatgpt.com'&&request.isNavigationRequest()&&request.frame().parentFrame())sourceFrames++;
+  if(u.origin==='https://chatgpt.com'&&u.pathname===new URL(sourceUrl).pathname&&request.resourceType()==='fetch')sourceRefreshes++;
   if(process.env.LIVE_SHARED_PAGE && (u.origin==='https://chatgpt.com'||u.hostname.endsWith('oaistatic.com')))return route.continue();
   if(u.origin==='https://chatgpt.com'&&u.pathname===new URL(sourceUrl).pathname)return route.fulfill({contentType:'text/html',body:inert});
   if(u.origin==='https://ao3.taglia.workers.dev'){
@@ -49,6 +51,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  }
  await page.goto(sourceUrl,{waitUntil:'domcontentloaded',timeout:45000});
  if(process.env.SOURCE_WAIT_MS)await page.waitForTimeout(Number(process.env.SOURCE_WAIT_MS));
+ if(process.env.REMOVE_SHARED_SCRIPTS)await page.evaluate(()=>document.querySelectorAll('script,[data-message-author-role],[data-assistant-markdown-root]').forEach(node=>node.remove()));
  const code=decodeURIComponent(fs.readFileSync(path.join(publicRoot,'assets/chatgpt-to-bookshelf.txt'),'utf8').slice('javascript:'.length));
  await page.evaluate(code=>{(0,eval)(code);},code);
  try {await page.waitForURL('https://ao3.taglia.workers.dev/',{waitUntil:'domcontentloaded'});}catch(error){console.log('TRANSFER STATE',page.url(),await page.evaluate(()=>({build:window.__AO3_BUILD_VERSION__,status:document.getElementById('browserReceiveStatus')?.textContent,payload:!!document.getElementById('browserTransferPayload'),receipt:sessionStorage.getItem('ao3_browser_transfer_saved'),books:JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')||'[]').map(n=>({title:n.title,chapters:n.chapters.length}))})));throw error;}
@@ -59,6 +62,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const saved=await page.evaluate(title=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')).find(n=>n.title===title),expected);
  if(!process.env.LIVE_TARGET)assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')).some(n=>n.id==='retained_book')),true);
  assert.equal(saved.chapters.length,expectedCount);assert.equal(saved.importSourceUrls[0],sourceUrl);
+ if(process.env.REQUIRE_SOURCE_REFRESH)assert(sourceRefreshes>0);
+ if(process.env.REQUIRE_SOURCE_FRAME)assert(sourceFrames>0);
  assert.equal(posts,1);assert.equal(remoteFetches,0);assert.equal(new URL(page.url()).pathname,'/');
  if(process.env.EXPECTED_AUTHOR)assert.equal(saved.author,process.env.EXPECTED_AUTHOR);
  if(process.env.SHARE_HTML_PATH&&!process.env.EXPECTED_TITLE){

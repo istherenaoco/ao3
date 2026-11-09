@@ -11,6 +11,14 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
  const parsed=await page.evaluate(html=>ChatgptShareImport.parse(html),html);
  assert.equal(parsed.meta.title,'Test Book');assert.equal(parsed.meta.author,'Writer');assert.equal(parsed.chapters.length,2);
  assert.deepEqual(parsed.chapters.map(c=>c.paragraphs),[['첫 문단.','둘째 문단.'],['셋째 문단.']]);
+ const mobile=await page.evaluate(()=>{
+   const encode=value=>Array.isArray(value)?['array',value.map(encode)]:value&&typeof value==='object'?['object',Object.entries(value).map(([key,item])=>[key,encode(item)])]:[typeof value,value];
+   const data={rows:[{id:'m1',role:'assistant',content:'# Mobile Book\n저자: Mobile Writer\nChapter 1\n모바일 본문.',reasoningSummary:'숨긴 분석'}]};
+   return ChatgptShareImport.parse('<script type="application/json" data-octane-native-signals>'+JSON.stringify({version:1,scopes:[{entries:[{value:encode(data)}]}]})+'</script>');
+ });
+ assert.equal(mobile.meta.title,'Mobile Book');assert.equal(mobile.meta.author,'Mobile Writer');assert.deepEqual(mobile.chapters[0].paragraphs,['모바일 본문.']);assert(!JSON.stringify(mobile).includes('숨긴 분석'));
+ const mobileDom=await page.evaluate(()=>ChatgptShareImport.parse('<div data-message-author-role="assistant"><div data-assistant-markdown-root><h1>Mobile Book</h1><p>저자: Writer</p><h2>Chapter 1</h2><p>본문.</p></div></div>'));
+ assert.equal(mobileDom.meta.title,'Mobile Book');assert.equal(mobileDom.chapters.length,1);assert.deepEqual(mobileDom.chapters[0].paragraphs,['본문.']);
  await page.route('**/api/chatgpt-share?*',r=>r.fulfill({contentType:'application/json',body:JSON.stringify({html,shareUrl:'https://chatgpt.com/share/6af1917c-bfc0-83e8-acbe-8c7b0f442e9a'})}));
  await page.locator('#chatgptShareUrlInput').fill('https://chatgpt.com/share/6af1917c-bfc0-83e8-acbe-8c7b0f442e9a');
  await page.locator('#chatgptShareImportBtn').evaluate(e=>e.click());

@@ -10,6 +10,7 @@
       "/api/*",
       "/",
       "/browser-import.html",
+      "/browser-import",
       "/ao3.html"
     ]
   },

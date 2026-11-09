@@ -37,13 +37,37 @@
     return validate(parsed);
   }
   function capture(html, url) {
+    const publicUrl = sourceUrl(url);
     const parsed = root.ChatgptShareImport.parse(html);
-    parsed.meta.shareUrl = sourceUrl(url);
+    parsed.meta.shareUrl = publicUrl;
     return encode(parsed);
+  }
+  async function readCurrentShare() {
+    sourceUrl(location.href);
+    try { return capture(document.documentElement.outerHTML, location.href); }
+    catch (error) {
+      return new Promise(function(resolve, reject) {
+        const frame = document.createElement('iframe');
+        frame.setAttribute('sandbox', 'allow-same-origin');
+        frame.style.display = 'none';
+        let finished = false;
+        const finish = function(error, payload) {
+          if (finished) return; finished = true; clearTimeout(timer); frame.remove();
+          if (error) reject(error); else resolve(payload);
+        };
+        const timer = setTimeout(function() { finish(new Error('공유 페이지 원본을 읽는 시간이 초과됐습니다.')); }, 20000);
+        frame.onload = function() {
+          try { finish(null, capture(frame.contentDocument.documentElement.outerHTML, location.href)); }
+          catch (error) { finish(error); }
+        };
+        frame.src = location.origin + location.pathname;
+        document.body.append(frame);
+      });
+    }
   }
   async function send(destination) {
     let payload;
-    try { payload = capture(document.documentElement.outerHTML, location.href); }
+    try { payload = await readCurrentShare(); }
     catch (error) { alert(error.message); return false; }
     const form = document.createElement('form');
     form.method = 'POST'; form.action = destination; form.acceptCharset = 'UTF-8';
@@ -52,5 +76,5 @@
     form.submit();
     return true;
   }
-  root.BrowserShareTransfer = { capture: capture, encode: encode, decode: decode, send: send };
+  root.BrowserShareTransfer = { capture: capture, encode: encode, decode: decode, send: send, readCurrentShare: readCurrentShare };
 })(window);

@@ -19,17 +19,37 @@
     }
     return at(0, 0);
   }
+  function decodeMobile(value, depth) {
+    depth = depth || 0;
+    if (depth > 100 || !value || typeof value !== 'object') return value;
+    if (Array.isArray(value)) {
+      if (value.length === 2 && value[0] === 'object' && Array.isArray(value[1])) {
+        const result = Object.create(null);
+        value[1].forEach(function(entry) {
+          if (Array.isArray(entry) && typeof entry[0] === 'string' && !['__proto__','constructor','prototype'].includes(entry[0])) result[entry[0]] = decodeMobile(entry[1], depth + 1);
+        });
+        return result;
+      }
+      if (value.length === 2 && value[0] === 'array' && Array.isArray(value[1])) return value[1].map(function(item) { return decodeMobile(item, depth + 1); });
+      if (value.length === 2 && ['string','number','boolean'].includes(value[0])) return value[1];
+      return value.map(function(item) { return decodeMobile(item, depth + 1); });
+    }
+    const result = Object.create(null);
+    Object.keys(value).forEach(function(key) { if (!['__proto__','constructor','prototype'].includes(key)) result[key] = decodeMobile(value[key], depth + 1); });
+    return result;
+  }
   function collect(data) {
     const messages = [], seen = new Set(), ids = new Set();
     function walk(value, depth) {
       if (!value || typeof value !== 'object' || seen.has(value) || depth > 100 || seen.size > 50000) return;
       seen.add(value);
       const message = value.message || value;
-      if (message.author && typeof message.author.role === 'string' && message.content) {
+      const role = message.author && message.author.role || message.role;
+      if (typeof role === 'string' && message.content) {
         const parts = message.content.parts;
-        const text = Array.isArray(parts) ? parts.filter(function(p) { return typeof p === 'string'; }).join('\n\n') : '';
+        const text = typeof message.content === 'string' ? message.content : Array.isArray(parts) ? parts.filter(function(p) { return typeof p === 'string'; }).join('\n\n') : '';
         const id = message.id || message;
-        if (text && !ids.has(id)) { ids.add(id); messages.push({ id: message.id, role: message.author.role, text: text, channel: message.channel, recipient: message.recipient, metadata: message.metadata || {} }); }
+        if (text && !ids.has(id)) { ids.add(id); messages.push({ id: message.id, role: role, text: text, channel: message.channel, recipient: message.recipient, metadata: message.metadata || {} }); }
         return;
       }
       for (const item of Object.values(value)) walk(item, depth + 1);
@@ -106,7 +126,7 @@
       const text = script.textContent || '';
       const candidates = [];
       if (script.type === 'application/json' || script.id === '__NEXT_DATA__') {
-        try { candidates.push(JSON.parse(text)); } catch (ignore) {}
+        try { const data = JSON.parse(text); candidates.push(script.hasAttribute('data-octane-native-signals') || script.hasAttribute('data-octane-suspense-signals') ? decodeMobile(data) : data); } catch (ignore) {}
       }
       const pattern = /streamController\.enqueue\(\s*("(?:[^"\\]|\\.)*")\s*\)/g;
       let match;
@@ -122,11 +142,12 @@
       }
     }
     if (!messages.some(function(m) { return m.role === 'assistant'; })) {
-      messages = Array.from(doc.querySelectorAll('[data-message-author-role]')).map(function(node) {
+      messages = Array.from(doc.querySelectorAll('[data-message-author-role], [data-assistant-markdown-root]')).filter(function(node) { return !node.parentElement.closest('[data-message-author-role], [data-assistant-markdown-root]'); }).map(function(node) {
         const copy = node.cloneNode(true);
         copy.querySelectorAll('button,nav,script,style').forEach(function(n) { n.remove(); });
+        copy.querySelectorAll('h1,h2,h3,h4').forEach(function(n) { n.prepend('#'.repeat(Number(n.tagName.slice(1))) + ' '); });
         copy.querySelectorAll('p,div,h1,h2,h3,h4,br,li').forEach(function(n) { n.append('\n'); });
-        return { role: node.getAttribute('data-message-author-role'), text: copy.textContent.trim() };
+        return { role: node.getAttribute('data-message-author-role') || 'assistant', text: copy.textContent.trim() };
       });
     }
     const assistant = messages.filter(function(m) { return m.role === 'assistant'; });
@@ -165,5 +186,5 @@
     meta.title = meta.title || usefulTitle || chapters[0].title || fallback;
     return { meta: meta, chapters: chapters, missingTitle: missingTitle, missingAuthor: missingAuthor };
   }
-  root.ChatgptShareImport = { parse: parse, collect: collect, unflatten: unflatten, cleanAnswer: cleanAnswer };
+  root.ChatgptShareImport = { parse: parse, collect: collect, unflatten: unflatten, decodeMobile: decodeMobile, cleanAnswer: cleanAnswer };
 })(window);
