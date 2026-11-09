@@ -32,6 +32,19 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   return route.abort();
  });
  const page=await context.newPage();
+ if (!process.env.LIVE_TARGET) {
+  await page.goto('https://ao3.taglia.workers.dev/');
+  await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__==='113');
+  await page.evaluate(async()=>{
+   const db=await new Promise((resolve,reject)=>{const request=indexedDB.open('ao3_korean_library_idb_v1',1);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+   await new Promise((resolve,reject)=>{const transaction=db.transaction('novels_store','readwrite');transaction.objectStore('novels_store').put([{id:'retained_book',title:'Existing Book',author:'Existing Author',createdAt:1,updatedAt:1,lastReadAt:1,chapters:[{id:'retained_chapter',title:'One',paragraphs:[{id:'retained_para',ko:'기존 본문',en:'',tags:[]}]}]}],'novels_list');transaction.oncomplete=resolve;transaction.onerror=()=>reject(transaction.error);});
+   db.close();localStorage.removeItem('ao3_korean_bookshelf_v1');
+  });
+  await context.addInitScript(()=>{
+   const original=IDBObjectStore.prototype.get;
+   IDBObjectStore.prototype.get=function(key){const request=original.call(this,key);if(key==='novels_list')Object.defineProperty(request,'onsuccess',{set(callback){request.addEventListener('success',event=>setTimeout(()=>callback.call(request,event),200));}});return request;};
+  });
+ }
  await page.goto(sourceUrl,{waitUntil:'domcontentloaded',timeout:45000});
  if(process.env.SOURCE_WAIT_MS)await page.waitForTimeout(Number(process.env.SOURCE_WAIT_MS));
  const code=decodeURIComponent(fs.readFileSync(path.join(publicRoot,'assets/chatgpt-to-bookshelf.txt'),'utf8').slice('javascript:'.length));
@@ -42,6 +55,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const expectedCount=Number(process.env.EXPECTED_CHAPTERS||(process.env.SHARE_HTML_PATH?6:2));
  await page.waitForFunction(title=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')||'[]').some(n=>n.title===title),expected);
  const saved=await page.evaluate(title=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')).find(n=>n.title===title),expected);
+ if(!process.env.LIVE_TARGET)assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('ao3_korean_bookshelf_v1')).some(n=>n.id==='retained_book')),true);
  assert.equal(saved.chapters.length,expectedCount);assert.equal(saved.importSourceUrls[0],sourceUrl);
  assert.equal(posts,1);assert.equal(remoteFetches,0);assert.equal(new URL(page.url()).pathname,'/');
  if(process.env.EXPECTED_AUTHOR)assert.equal(saved.author,process.env.EXPECTED_AUTHOR);
