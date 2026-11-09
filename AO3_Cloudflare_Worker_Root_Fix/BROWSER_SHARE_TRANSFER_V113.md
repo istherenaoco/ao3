@@ -13,3 +13,5 @@ Validation:
 - The provided conversation contents are not committed. Optional test variables are documented in `tests/browser-share-transfer-v113.cjs`.
 
 Regenerate the bookmarklet after editing the parser or transfer module with `npm run build:browser-import`. The generated text file is deployed as a static asset, with no external script dependency on the ChatGPT page.
+
+Production verification: WebKit mobile viewport opened the second supplied public share URL over HTTPS, waited for the source page to settle, and executed the transfer against the deployed `ao3.taglia.workers.dev` endpoint (no local handler/assets). The form POST returned 200; the client saved the detected title, author, and nine continuation responses, navigated to `/` with GET, and retained the novel after an actual reload. No clipboard permissions were granted. Cloudflare reported the production build successful. This validates the WebKit browser flow; physical iPhone bookmark installation remains a user device step.
