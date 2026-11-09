@@ -7712,7 +7712,7 @@
                   JSON.stringify(incoming.paragraphs.map(function(p) { return p.ko; }));
               });
             });
-            if (!savedChapters.length) { showToast('이미 책장에 저장된 공유 대화입니다.'); return true; }
+            if (!savedChapters.length) { showToast('이미 책장에 저장된 공유 대화입니다.', 'warning'); return true; }
           }
           const chapter = savedChapters[0];
           const isBookmarked = document.getElementById('studioBookmarkCheck').checked;
