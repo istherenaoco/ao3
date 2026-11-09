@@ -1,3 +1,4 @@
+import { handleBrowserShareImport } from './browser-share-import.js';
 import { handleChatgptShare } from './chatgpt-share.js';
 import { jsonHeaders, jsonResponse, upstreamErrorMessage } from './shared.js';
 
@@ -29,6 +30,7 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: jsonHeaders(request) });
       if (url.pathname === '/api/status') return handleStatus(request, env);
+      if (url.pathname === '/api/browser-share-import') return handleBrowserShareImport(request, env);
       if (url.pathname === '/api/chatgpt-share') return handleChatgptShare(request);
       if (url.pathname === '/api/ao3-fetch') return handleAo3Fetch(request);
       if (url.pathname === '/api/groq-translate') return handleGroq(request, env);
