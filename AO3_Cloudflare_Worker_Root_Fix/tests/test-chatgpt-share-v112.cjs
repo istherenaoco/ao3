@@ -13,7 +13,10 @@ const assert = require('node:assert/strict');
  calls=0;assert.equal((await handleChatgptShare(req('https://evil.test/'))).status,400);assert.equal(calls,0);
  global.fetch=async()=>new Response(null,{status:302,headers:{Location:'https://evil.test'}});
  assert.equal((await handleChatgptShare(req())).status,502);
- global.fetch=async()=>new Response('challenge',{status:403});assert.equal((await handleChatgptShare(req())).status,502);
+ global.fetch=async()=>new Response('challenge',{status:403,headers:{'cf-mitigated':'challenge'}});
+ const blocked=await handleChatgptShare(req());assert.equal(blocked.status,502);
+ const details=await blocked.json();assert.equal(details.upstreamStatus,403);assert.equal(details.reason,'challenge');
+ global.fetch=async()=>new Response('forbidden',{status:403});assert.equal((await (await handleChatgptShare(req())).json()).reason,'forbidden');
  global.fetch=async()=>new Response('x'.repeat(10*1024*1024+1),{headers:{'content-type':'text/html'}});assert.equal((await handleChatgptShare(req())).status,413);
  }finally{global.fetch=original;}
  console.log('PASS public share URL validation, no credentials/redirects, size limits, cache and upstream errors');

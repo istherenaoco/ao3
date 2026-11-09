@@ -21,7 +21,12 @@ export async function handleChatgptShare(request) {
     const upstream = await fetch(target, { redirect: 'manual', signal: controller.signal, headers: { Accept: 'text/html,application/xhtml+xml', 'Accept-Language': 'ko-KR,ko;q=0.9', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' } });
     if (!upstream.ok) {
       await upstream.body?.cancel();
-      return jsonResponse(request, { error: '공유 페이지에 접근할 수 없습니다. 공개 상태를 확인하거나 번역문을 붙여넣어 주세요.' }, 502);
+      const upstreamStatus = upstream.status;
+      const challenge = upstream.headers.get('cf-mitigated') === 'challenge';
+      const redirected = upstreamStatus >= 300 && upstreamStatus < 400;
+      const reason = challenge ? 'challenge' : redirected ? 'redirect' : upstreamStatus === 403 ? 'forbidden' : upstreamStatus === 404 ? 'not_found' : upstreamStatus === 429 ? 'rate_limit' : 'upstream_error';
+      const explanation = challenge ? 'ChatGPT가 서버 요청에 브라우저 확인을 요구했습니다.' : upstreamStatus === 403 ? 'ChatGPT가 서버의 공유 페이지 요청을 거부했습니다.' : upstreamStatus === 404 ? '공유 페이지를 찾을 수 없습니다. 삭제 또는 공개 해제 여부를 확인해 주세요.' : upstreamStatus === 429 ? 'ChatGPT 요청 한도에 도달했습니다. 잠시 뒤 다시 시도해 주세요.' : redirected ? '공유 페이지가 다른 주소로 이동해 가져오기를 중단했습니다.' : 'ChatGPT 공유 페이지에서 오류가 발생했습니다.';
+      return jsonResponse(request, { error: explanation + ' (HTTP ' + upstreamStatus + ') 본문 붙여넣기 또는 파일 업로드를 이용해 주세요.', upstreamStatus, reason }, 502);
     }
     if (!/text\/html/i.test(upstream.headers.get('content-type') || '')) {
       await upstream.body?.cancel();
