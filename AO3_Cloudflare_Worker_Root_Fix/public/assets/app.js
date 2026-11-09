@@ -7809,17 +7809,32 @@
               const parsed = window.BrowserShareTransfer.decode(JSON.parse(browserPostedPayload.textContent));
               await libraryHydrationPromise;
               const saved = await saveFinishedTranslation(parsed);
-              if (saved) showToast(parsed.chapters.length + '개 챕터를 브라우저에서 받아 저장했습니다.' + (parsed.missingAuthor ? ' 저자는 대화에서 확인되지 않았습니다.' : ''), 'warning');
+              if (saved) {
+                await idbSetNovels(state.novels);
+                const novel = state.novels.find(function(n) { return (n.importSourceUrls || []).includes(parsed.meta.shareUrl); });
+                try { sessionStorage.setItem('ao3_browser_transfer_saved', JSON.stringify({ id: novel && novel.id, chapters: parsed.chapters.length, missingAuthor: parsed.missingAuthor })); } catch (ignoreTransferReceipt) {}
+                location.replace('/');
+              }
             } catch (error) {
               openImportDialog(browserReceive);
               document.getElementById('browserReceiveStatus').textContent = error.message;
             } finally {
               browserPostedPayload.remove();
-              history.replaceState(null, '', '/');
             }
           };
           receivePostedTransfer();
         }
+        try {
+          const receiptText = sessionStorage.getItem('ao3_browser_transfer_saved');
+          if (receiptText && !browserPostedPayload) {
+            sessionStorage.removeItem('ao3_browser_transfer_saved');
+            const receipt = JSON.parse(receiptText);
+            libraryHydrationPromise.then(function() {
+              if (state.novels.some(function(n) { return n.id === receipt.id; })) openNovelInReader(receipt.id, 0);
+              showToast(receipt.chapters + '개 챕터를 브라우저에서 받아 저장했습니다.' + (receipt.missingAuthor ? ' 저자는 대화에서 확인되지 않았습니다.' : ''), 'warning');
+            });
+          }
+        } catch (ignoreTransferReceipt) {}
         const browserImportParams = new URLSearchParams(location.search);
         if (browserImportParams.get('setup') === 'browser') openBrowserImportHelp();
         document.getElementById('chatgptShareImportBtn').addEventListener('click', async function(event) {

@@ -25,6 +25,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
     return route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:await response.text()});
    }
    if(u.pathname.startsWith('/api/')){if(u.pathname==='/api/chatgpt-share')remoteFetches++;return route.fulfill({contentType:'application/json',body:JSON.stringify({platform:'cloudflare-worker',providers:{}})});}
+   if(request.method()!=='GET')return route.fulfill({status:405,body:'Assets require GET'});
    const file=u.pathname==='/'?path.join(publicRoot,'index.html'):path.resolve(publicRoot,'.'+u.pathname);
    if(!file.startsWith(publicRoot+path.sep)||!fs.existsSync(file))return route.fulfill({status:404,body:'missing'});
    return route.fulfill({contentType:/\.js$/.test(file)?'application/javascript':/\.css$/.test(file)?'text/css':/\.html$/.test(file)?'text/html':'text/plain',body:fs.readFileSync(file)});
@@ -49,7 +50,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  if(process.env.SOURCE_WAIT_MS)await page.waitForTimeout(Number(process.env.SOURCE_WAIT_MS));
  const code=decodeURIComponent(fs.readFileSync(path.join(publicRoot,'assets/chatgpt-to-bookshelf.txt'),'utf8').slice('javascript:'.length));
  await page.evaluate(code=>{(0,eval)(code);},code);
- await page.waitForURL('https://ao3.taglia.workers.dev/**');
+ await page.waitForURL('https://ao3.taglia.workers.dev/');
  await page.waitForFunction(()=>window.__AO3_BUILD_VERSION__==='113');
  const expected=process.env.EXPECTED_TITLE||(process.env.SHARE_HTML_PATH?'BOGO':'Bridge Book');
  const expectedCount=Number(process.env.EXPECTED_CHAPTERS||(process.env.SHARE_HTML_PATH?6:2));
