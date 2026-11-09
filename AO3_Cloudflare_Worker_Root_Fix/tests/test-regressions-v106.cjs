@@ -11,8 +11,8 @@ function assert(ok, message) { if (!ok) throw new Error(message); }
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]);
 const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
 assert(duplicates.length === 0, 'HTML contains duplicate IDs: ' + [...new Set(duplicates)].join(', '));
-assert(html.includes('app.js?v=111.0'), 'cache-busting version is stale');
-assert(app.includes("window.__AO3_BUILD_VERSION__ = '111'"), 'build version should be 108');
+assert(html.includes('app.js?v=112.0'), 'cache-busting version is stale');
+assert(app.includes("window.__AO3_BUILD_VERSION__ = '112'"), 'build version should be 108');
 
 // Multiple special lists: editing previous list by tracked ID is required when the select value has already changed.
 assert(app.includes('function ao3WriteGeminiKeyListInputsToList(list)'), 'list-editor writer helper missing');

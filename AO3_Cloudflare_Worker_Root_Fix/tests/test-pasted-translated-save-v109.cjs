@@ -14,5 +14,5 @@ assert(/saveToStorage\(targetNovel\.id\)/.test(handler), 'save directly to local
 assert(/openNovelInReader\(targetNovel\.id, targetNovel\.chapters\.indexOf\(chapter\)\)/.test(handler), 'open saved chapter in reader');
 assert(/이미 번역된 본문/.test(html), 'UI labels the field as already-translated text');
 assert(/API 번역 없이 책장에 저장됩니다/.test(html), 'UI explains that no API translation is performed');
-assert(/app\.js\?v=111\.0/.test(html), 'asset cache version bumped');
+assert(/app\.js\?v=112\.0/.test(html), 'asset cache version bumped');
 console.log('PASS: pasted translated text is stored directly without translation API calls');

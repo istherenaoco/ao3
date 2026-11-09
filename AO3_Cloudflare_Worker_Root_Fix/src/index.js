@@ -1,3 +1,4 @@
+import { handleChatgptShare } from './chatgpt-share.js';
 import { jsonHeaders, jsonResponse, upstreamErrorMessage } from './shared.js';
 
 const MAX_GROQ_BATCH_CHARS = 10000;
@@ -28,6 +29,7 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: jsonHeaders(request) });
       if (url.pathname === '/api/status') return handleStatus(request, env);
+      if (url.pathname === '/api/chatgpt-share') return handleChatgptShare(request);
       if (url.pathname === '/api/ao3-fetch') return handleAo3Fetch(request);
       if (url.pathname === '/api/groq-translate') return handleGroq(request, env);
       if (url.pathname === '/api/azure-translate') return handleAzure(request, env);
