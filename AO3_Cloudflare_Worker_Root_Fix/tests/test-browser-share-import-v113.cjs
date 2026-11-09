@@ -1,6 +1,12 @@
 const assert=require('node:assert/strict');
 (async()=>{
  const {handleBrowserShareImport}=await import('../src/browser-share-import.js');
+ const worker=(await import('../src/index.js')).default;
+ const guideRedirect=await worker.fetch(new Request('https://ao3.taglia.workers.dev/?setup=browser'),{});
+ assert.equal(guideRedirect.status,302);assert.equal(guideRedirect.headers.get('location'),'https://ao3.taglia.workers.dev/browser-import.html');assert.equal(guideRedirect.headers.get('cache-control'),'no-store');
+ const guide=await worker.fetch(new Request('https://ao3.taglia.workers.dev/browser-import.html'),{ASSETS:{fetch:async()=>new Response('<h1>Guide</h1>',{headers:{'Content-Type':'text/html'}})}});
+ assert(guide.headers.get('cache-control').includes('no-store'));
+ const config=JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname,'../wrangler.jsonc'),'utf8'));assert(config.assets.run_worker_first.includes('/'));assert(config.assets.run_worker_first.includes('/browser-import.html'));
  const endpoint='https://ao3.taglia.workers.dev/api/browser-share-import';
  const body='AO3-BROWSER-SHARE/1\n'+JSON.stringify({meta:{title:'Example'},chapters:[{title:'One',paragraphs:['</script><img src=x onerror=alert(1)>']}]});
  const request=(origin='https://chatgpt.com')=>new Request(endpoint,{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({payload:body})});

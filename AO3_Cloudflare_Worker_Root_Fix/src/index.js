@@ -27,6 +27,9 @@ function extractAssistantText(content) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/' && url.searchParams.get('setup') === 'browser') {
+      return new Response(null, {status:302,headers:{Location:new URL('/browser-import.html',url).href,'Cache-Control':'no-store'}});
+    }
     if (url.pathname.startsWith('/api/')) {
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: jsonHeaders(request) });
       if (url.pathname === '/api/status') return handleStatus(request, env);
