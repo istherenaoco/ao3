@@ -20,5 +20,5 @@ assert(js.includes('if (state.settings.geminiCooldownEnabled !== false) {\n     
 assert(js.includes('ao3FormatGeminiCooldownRemaining(remaining)'), 'remaining cooldown time is not rendered');
 assert(js.includes("['groqEnabled', 'workersAiEnabled', 'azureEnabled', 'geminiCooldownEnabled']"), 'cooldown setting missing from Google Drive user preferences');
 assert(js.includes("if (typeof decoded.settings.geminiCooldownEnabled === 'boolean') state.settings.geminiCooldownEnabled = decoded.settings.geminiCooldownEnabled;"), 'cooldown setting missing from encrypted settings restore');
-assert(html.includes('app.js?v=110.0'), 'app cache-busting version is not updated');
+assert(html.includes('app.js?v=111.0'), 'app cache-busting version is not updated');
 console.log('Gemini key rotation and cooldown regression checks passed.');
