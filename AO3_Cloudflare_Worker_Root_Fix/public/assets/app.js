@@ -30,6 +30,7 @@
       const CUSTOM_SHELVES_KEY = 'ao3_custom_bookshelves_v1';
       const DRIVE_CUSTOM_SHELVES_FILE = 'ao3_custom_bookshelves.json';
       const DRIVE_SYNC_INDEX_KEY = 'ao3_google_drive_sync_index_v1';
+      const DRIVE_CHATGPT_INBOX_FILE = 'ao3_chatgpt_inbox.json';
       const CUSTOM_SHELVES_SYNC_TS_KEY = 'ao3_custom_bookshelves_drive_updated_at_v1';
       const IDB_STORE = 'novels_store';
 
@@ -2139,6 +2140,85 @@
         return all;
       }
 
+
+      // The site uses drive.file (per-file OAuth permission). Files uploaded by
+      // another OAuth app, including ChatGPT, are not automatically visible.
+      // This inbox is created by THIS app and can be updated in place by the
+      // user's separate Drive connection without broadening the OAuth scope.
+      async function ensureChatGPTInboxFile(folderId, remoteFiles) {
+        const existing = remoteFiles.find(function(f) { return f.name === DRIVE_CHATGPT_INBOX_FILE; });
+        if (existing) return existing.id;
+        const boundary = '-------ao3chatgptinbox' + Date.now();
+        const metadata = { name: DRIVE_CHATGPT_INBOX_FILE, mimeType: 'application/json', parents: [folderId] };
+        const body = { schemaVersion: 1, novels: [] };
+        const multipart =
+          '--' + boundary + '\r\n' +
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+          JSON.stringify(metadata) + '\r\n' +
+          '--' + boundary + '\r\n' +
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+          JSON.stringify(body) + '\r\n' +
+          '--' + boundary + '--';
+        const res = await driveApiFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+          body: multipart
+        });
+        if (!res.ok) throw new Error('ChatGPT 수신함 생성 실패 (HTTP ' + res.status + ')');
+        const created = await res.json();
+        if (!created.id) throw new Error('ChatGPT 수신함의 Drive ID가 없습니다.');
+        return created.id;
+      }
+
+      async function importChatGPTInbox(folderId, remoteFiles) {
+        const fileId = await ensureChatGPTInboxFile(folderId, remoteFiles);
+        const res = await driveApiFetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media');
+        if (!res.ok) throw new Error('ChatGPT 수신함 읽기 실패 (HTTP ' + res.status + ')');
+        const payload = await res.json();
+        if (!payload || payload.schemaVersion !== 1 || !Array.isArray(payload.novels)) {
+          throw new Error('ChatGPT 수신함 JSON 형식이 올바르지 않습니다.');
+        }
+        let imported = 0;
+        payload.novels.forEach(function(candidate) {
+          if (!candidate || typeof candidate.id !== 'string' || !candidate.id.startsWith('novel_') ||
+              typeof candidate.title !== 'string' || !candidate.title.trim() ||
+              typeof candidate.author !== 'string' || !candidate.author.trim() ||
+              !Array.isArray(candidate.chapters) || !candidate.chapters.length ||
+              !candidate.chapters.every(function(ch) {
+                return ch && Array.isArray(ch.paragraphs) && ch.paragraphs.length > 0 &&
+                  ch.paragraphs.every(function(p) { return p && typeof p.ko === 'string'; });
+              })) return;
+          if (state.deletedNovelIds && state.deletedNovelIds[candidate.id]) return;
+          const sameWorkId = String(candidate.ao3WorkId || '').trim();
+          const duplicate = state.novels.some(function(n) {
+            return n && (n.id === candidate.id ||
+              (sameWorkId && String(n.ao3WorkId || '').trim() === sameWorkId) ||
+              (String(n.title || '').trim().toLowerCase() === candidate.title.trim().toLowerCase() &&
+               String(n.author || '').trim().toLowerCase() === candidate.author.trim().toLowerCase()));
+          });
+          if (duplicate) return;
+          const novel = JSON.parse(JSON.stringify(candidate));
+          delete novel.driveFileId; // The site will create its own authorized novel file.
+          const now = Date.now();
+          novel.createdAt = Number(novel.createdAt) || now;
+          novel.updatedAt = Number(novel.updatedAt) || now;
+          novel.bookmarked = Boolean(novel.bookmarked);
+          novel.bookmarkTags = Array.isArray(novel.bookmarkTags) ? novel.bookmarkTags : [];
+          novel.bookmarkNote = typeof novel.bookmarkNote === 'string' ? novel.bookmarkNote : '';
+          novel.chapters.forEach(function(ch) {
+            ch.paragraphs.forEach(function(p) {
+              p.en = typeof p.en === 'string' ? p.en : '';
+              p.bookmarked = Boolean(p.bookmarked);
+              p.tags = Array.isArray(p.tags) ? p.tags : [];
+              p.note = typeof p.note === 'string' ? p.note : '';
+            });
+          });
+          state.novels.push(novel);
+          imported++;
+        });
+        return imported;
+      }
+
       async function syncWithGoogleDrive(silent) {
         if (state.currentView !== 'bookshelf') {
           if (!silent) showToast('Google Drive 동기화는 메인 책장에서만 실행됩니다.', 'info');
@@ -2162,6 +2242,9 @@
           ]);
           window._ao3DriveNeedsPreferencesSync = false;
           const remoteFiles = await listDriveFolderJsonFiles(folderId);
+          let inboxImportFailed = false;
+          try { await importChatGPTInbox(folderId, remoteFiles); }
+          catch (error) { inboxImportFailed = true; console.warn('ChatGPT Drive inbox sync failed:', error); }
           const localMap = {};
           state.novels.forEach(function(n) { if (n && n.id) localMap[n.id] = n; });
           const seenIds = {};
@@ -2207,7 +2290,7 @@
             novel.driveFileId = task.file.id;
             return { task: task, novel: novel };
           });
-          let downloadFailed = false;
+          let downloadFailed = inboxImportFailed;
           downloaded.forEach(function(result) {
             if (!result || !result.ok) { downloadFailed = true; return; }
             const task = result.value.task;
